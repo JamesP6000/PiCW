@@ -102,6 +102,9 @@ volatile unsigned *allof7e = NULL;
 #define DMABASE (0x7E007000)
 #define PWMBASE  (0x7e20C000) /* PWM controller */
 
+// g++ 4.7 in c++11 mode had trouble with this struct. I removed it
+// and used bit shifts to create the word to be written.
+/*
 struct GPCTL {
     char SRC         : 4;
     char ENAB        : 1;
@@ -113,6 +116,7 @@ struct GPCTL {
     unsigned int     : 13;
     char PASSWD      : 8;
 };
+*/
 
 struct CB {
     volatile unsigned int TI;
@@ -184,14 +188,46 @@ void txon()
     //ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 6;  //14mA +10.0dBm
     ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 7;  //16mA +10.6dBm
 
-    struct GPCTL setupword = {6/*SRC*/, 1, 0, 0, 0, 3,0x5a};
-    ACCESS(CM_GP0CTL) = *((int*)&setupword);
+    //struct GPCTL setupword = {6/*SRC*/, 1, 0, 0, 0, 3,0x5a};
+    //ACCESS(CM_GP0CTL) = *((int*)&setupword);
+    ACCESS(CM_GP0CTL) =
+      // PW
+      (0x5a<<24) |
+      // MASH
+      (3<<9) |
+      // Flip
+      (0<<8) |
+      // Busy
+      (0<<7) |
+      // Kill
+      (0<<5) |
+      // Enable
+      (1<<4) |
+      // SRC
+      (6<<0)
+    ;
 }
 
 void txoff()
 {
-    struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
-    ACCESS(CM_GP0CTL) = *((int*)&setupword);
+    //struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
+    //ACCESS(CM_GP0CTL) = *((int*)&setupword);
+    ACCESS(CM_GP0CTL) =
+      // PW
+      (0x5a<<24) |
+      // MASH
+      (1<<9) |
+      // Flip
+      (0<<8) |
+      // Busy
+      (0<<7) |
+      // Kill
+      (0<<5) |
+      // Enable
+      (0<<4) |
+      // SRC
+      (6<<0)
+    ;
 }
 
 // Transmit tone tone_freq for tsym seconds.
@@ -942,14 +978,44 @@ void set_current(
     value=8;
   }
   if (value==0) {
-    MARK;
-    struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
-    ACCESS(CM_GP0CTL) = *((int*)&setupword);
+    //struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
+    //ACCESS(CM_GP0CTL) = *((int*)&setupword);
+    ACCESS(CM_GP0CTL) =
+      // PW
+      (0x5a<<24) |
+      // MASH
+      (1<<9) |
+      // Flip
+      (0<<8) |
+      // Busy
+      (0<<7) |
+      // Kill
+      (0<<5) |
+      // Enable
+      (0<<4) |
+      // SRC
+      (6<<0)
+    ;
   } else {
     ACCESS(PADS_GPIO_0_27) = 0x5a000018 + ((value - 1)&0x7);
-    MARK;
-    struct GPCTL setupword = {6/*SRC*/, 1, 0, 0, 0, 3,0x5a};
-    ACCESS(CM_GP0CTL) = *((int*)&setupword);
+    //struct GPCTL setupword = {6/*SRC*/, 1, 0, 0, 0, 3,0x5a};
+    //ACCESS(CM_GP0CTL) = *((int*)&setupword);
+    ACCESS(CM_GP0CTL) =
+      // PW
+      (0x5a<<24) |
+      // MASH
+      (3<<9) |
+      // Flip
+      (0<<8) |
+      // Busy
+      (0<<7) |
+      // Kill
+      (0<<5) |
+      // Enable
+      (1<<4) |
+      // SRC
+      (6<<0)
+    ;
   }
 }
 
