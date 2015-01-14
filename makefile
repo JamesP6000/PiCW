@@ -3,7 +3,7 @@ prefix=/usr/local
 all: PiCW
 
 PiCW: PiCW.cpp
-	g++ -std=c++11 -Wall -Werror -lm PiCW.cpp -oPiCW
+	g++-4.7 -std=c++11 -Wall -Werror -fmax-errors=5 -lm PiCW.cpp -oPiCW
 
 #.PHONY: install
 #install: wspr

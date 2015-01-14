@@ -18,6 +18,14 @@ License:
 
 */
 
+#include <map>
+#include <deque>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <random>
+#include <atomic>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -196,7 +204,7 @@ void txSym(
   std::atomic <bool> & terminate,
   const double & tone_freq,
   const double & tsym,
-  const vector <double> & dma_table_freq,
+  const std::vector <double> & dma_table_freq,
   const double & f_pwm_clk,
   struct PageInfo instrs[],
   struct PageInfo & constPage,
@@ -282,7 +290,7 @@ double bit_trunc(
 void setupDMATab(
   const double & tone_freq,
   const double & plld_actual_freq,
-  vector <double> & dma_table_freq,
+  std::vector <double> & dma_table_freq,
   struct PageInfo & constPage
 ){
   // Make sure that the tone can be produced solely by
@@ -305,7 +313,7 @@ void setupDMATab(
   // while the clock generator is enabled. Check to see that it is also safe
   // to change the integer part. If it is not safe to change the integer part,
   // then there will be some frequencies which are not synthesizeable.
-  vector <long int> tuning_word(1024);
+  std::vector <long int> tuning_word(1024);
   double div=bit_trunc(plld_actual_freq/tone_freq,-12)+pow(2.0,-12);
   tuning_word[0]=((int)(div*pow(2.0,12)));
   div-=pow(2.0,-12);
@@ -693,7 +701,7 @@ void parse_commandline(
         ABORT(-1);
         break;
       case 'f':
-        freq=strtod(optarg,&endp);
+        tone_freq=strtod(optarg,&endp);
         if ((optarg==endp)||(*endp!='\0')) {
           std::cerr << "Error: could not parse frequency" << std::endl;
           ABORT(-1);
@@ -726,7 +734,6 @@ void parse_commandline(
   }
 
   // Parse the non-option parameters
-  unsigned int n_free_args=0;
   while (optind<argc) {
     if (!str.empty()) {
       str+=" ";
@@ -743,8 +750,8 @@ void parse_commandline(
   // Print a summary of the parsed options
   std::cout << "PiCW parsed command line options:" << std::endl;
   std::stringstream temp;
-  temp << setprecision(6) << fixed;
-  temp << freq/1e6 << " MHz";
+  temp << std::setprecision(6) << std::fixed;
+  temp << tone_freq/1e6 << " MHz";
   std::cout << "  TX frequency: " << temp.str() << std::endl;
   temp.str("");
   std::cout << "  WPM: " << wpm << std::endl;
@@ -827,7 +834,7 @@ void tone_main(
   }
   double ppm_old=ppm;
   double freq_old=freq;
-  vector <double> & dma_table_freq,
+  std::vector <double> dma_table_freq;
   setupDMATab(freq_old,F_PLLD_CLK*(1-ppm_old/1e6),dma_table_freq,constPage);
   int bufPtr=0;
 
@@ -866,7 +873,7 @@ void tone_main(
 
 class time_value {
   public:
-    double time;
+    std::chrono::duration <double> time;
     unsigned int value;
 };
 
@@ -900,7 +907,7 @@ void raised_cosine(
   {
     time_value rec;
     rec.value=0;
-    rec.time=0;
+    rec.time=std::chrono::duration <double> (0);
     rise.push_back(rec);
     rec.value=8;
     fall.push_back(rec);
@@ -908,19 +915,19 @@ void raised_cosine(
   for (double y=0.5/8.0;y<1;y+=1.0/8.0) {
     time_value rec;
     rec.value=round(y*8.0+0.5);
-    rec.time=acos(1-2*y)/M_PI*width_secs;
+    rec.time=std::chrono::duration <double> (acos(1-2*y)/M_PI*width_secs);
     rise.push_back(rec);
   }
   for (double y=7.5/8.0;y>0;y-=1.0/8.0) {
     time_value rec;
     rec.value=round(y*8.0-0.5);
-    rec.time=acos(2*y-1)/M_PI*width_secs;
+    rec.time=std::chrono::duration <double> (acos(2*y-1)/M_PI*width_secs);
     fall.push_back(rec);
   }
   {
     time_value rec;
     rec.value=8;
-    rec.time=width_secs;
+    rec.time=std::chrono::duration <double> (width_secs);
     rise.push_back(rec);
     rec.value=0;
     fall.push_back(rec);
@@ -935,10 +942,12 @@ void set_current(
     value=8;
   }
   if (value==0) {
+    MARK;
     struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     ACCESS(CM_GP0CTL) = *((int*)&setupword);
   } else {
-    ACCESS(PADS_GPIO_0_27) = 0x5a000018 + value - 1;
+    ACCESS(PADS_GPIO_0_27) = 0x5a000018 + ((value - 1)&0x7);
+    MARK;
     struct GPCTL setupword = {6/*SRC*/, 1, 0, 0, 0, 3,0x5a};
     ACCESS(CM_GP0CTL) = *((int*)&setupword);
   }
@@ -955,23 +964,23 @@ void send_dit_dah(
   // of 1.0 will produce a dit that has a ramp going up, a ramp going down,
   // and no flat portion.
   const double ramp_excess=0.3;
-  const double ramp_time=dot_duration_sec*ramp_excess;
-  const flat_time=dot_duration_sec*(1-ramp_excess)+((sym=='-')?(2*dot_duration_sec):(0));
+  const std::chrono::duration <double> ramp_time(dot_duration_sec*ramp_excess);
+  const std::chrono::duration <double> flat_time(dot_duration_sec*(1-ramp_excess)+((sym=='-')?(2*dot_duration_sec):(0)));
   // Jitter adjusts the timing of the rising and falling ramp. This serves
   // to spread out the harmonics that are created.
   const double jitter_factor=0.1;
   std::uniform_real_distribution<> dis(0,jitter_factor*dot_duration_sec);
-  const double jitter_rise=dis(gen);
-  const double jitter_fall=dis(gen);
+  const std::chrono::duration <double> jitter_rise(dis(gen));
+  const std::chrono::duration <double> jitter_fall(dis(gen));
 
   // Calculate the rise and fall ramps.
   static bool initialized=false;
-  static double ramp_time_prev=0;
+  static std::chrono::duration <double> ramp_time_prev(0);
   static std::vector <time_value> rise;
   static std::vector <time_value> fall;
   if ((!initialized)||(ramp_time_prev!=ramp_time)) {
     raised_cosine(
-      ramp_time,
+      ramp_time.count(),
       rise,
       fall
     );
@@ -982,13 +991,14 @@ void send_dit_dah(
   std::chrono::high_resolution_clock::time_point ref=std::chrono::high_resolution_clock::now();
 
   // Delay the rising ramp.
+  //std::chrono::duration <double> jitter_rise_duration(jitter_rise);
   std::this_thread::sleep_until(ref+jitter_rise);
   if (terminate) {
     return;
   }
   // Rising ramp.
   for (auto & tv:rise) {
-    std::this_thread::sleep_until(ref+jitter_rise1+tv.time);
+    std::this_thread::sleep_until(ref+jitter_rise+tv.time);
     if (terminate) {
       return;
     }
@@ -1017,12 +1027,12 @@ void am_main(
   std::deque <char> & queue,
   std::mutex & queue_mutex,
   std::condition_variable & queue_signal,
-  const std::map <char,std::string> & morse_table,
-  std::atomic <double> & wpm
-  std::atomic <bool> & busy;
+  std::map <char,std::string> & morse_table,
+  std::atomic <double> & wpm,
+  std::atomic <bool> & busy
 ) {
   bool prev_char_whitespace=true;
-  std::chrono::high_resolution_clock::time_point earliest_tx_time=std::chrono::high_resolution_clock::now();
+  std::chrono::time_point <std::chrono::high_resolution_clock,std::chrono::duration <double>> earliest_tx_time=std::chrono::high_resolution_clock::now();
 
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -1057,7 +1067,7 @@ void am_main(
         // Ignore multiple whitespaces.
         continue;
       } else {
-        earliest_tx_time+=std::chrono::nanoseconds(4*dot_duration*1e6);
+        earliest_tx_time=earliest_tx_time+std::chrono::duration <double> (4*dot_duration_sec);
         prev_char_whitespace=true;
         continue;
       }
@@ -1077,21 +1087,21 @@ void am_main(
     }
 
     // Send the dits and dahs
-    const std::string tx_pattern=morse_table[tx_char];
+    std::string tx_pattern=morse_table[tx_char];
     for (unsigned int t=0;t<tx_pattern.length();t++) {
       std::this_thread::sleep_until(earliest_tx_time);
       if (terminate) {
         return;
       }
       const char sym=tx_pattern[t];
-      send_dit_dah(sym,dot_duration_sec,gen);
+      send_dit_dah(terminate,sym,dot_duration_sec,gen);
       if (sym=='.') {
-        earliest_tx_time+=std::chrono::nanoseconds(2*dot_duration*1e6);
+        earliest_tx_time+=std::chrono::duration <double> (2*dot_duration_sec);
       } else {
-        earliest_tx_time+=std::chrono::nanoseconds(4*dot_duration*1e6);
+        earliest_tx_time+=std::chrono::duration <double> (4*dot_duration_sec);
       }
     }
-    earliest_tx_time+=std::chrono::nanoseconds(3*dot_duration*1e6);
+    earliest_tx_time+=std::chrono::duration <double> (3*dot_duration_sec);
 
   }
 }
@@ -1140,7 +1150,7 @@ void morse_table_init(
   morse_table[',']="−−..−−";
   morse_table[':']="−−−...";
   morse_table['?']="..−−..";
-  morse_table[''']=".−−−−.";
+  morse_table['\'']=".−−−−.";
   morse_table['-']="−....−";
   morse_table['/']="−..−.";
   morse_table['(']="−.−−.";
@@ -1198,7 +1208,7 @@ int main(const int argc, char * const argv[]) {
   txoff();
 
   // Morse code table.
-  std::map <char,std::string> & morse_table;
+  std::map <char,std::string> morse_table;
   morse_table_init(morse_table);
 
   // Atomics used for IPC
@@ -1210,35 +1220,31 @@ int main(const int argc, char * const argv[]) {
   // Start tone thread.
   std::atomic <bool> terminate_tone_thread;
   terminate_tone_thread=false;
-  std::thread tone_thread(
-    tone_main(
-      terminate_tone_thread,
-      self_cal,
-      ppm_init,
-      tone_freq,
-      instrs,
-      constPage
-    )
+  std::thread tone_thread(tone_main,
+    std::ref(terminate_tone_thread),
+    std::ref(self_cal),
+    std::ref(ppm_init),
+    std::ref(tone_freq),
+    instrs,
+    std::ref(constPage)
   );
 
   // Start AM thread
   std::atomic <bool> terminate_am_thread;
   terminate_am_thread=false;
-  std::deque <char> & queue;
-  std::mutex & queue_mutex;
-  std::condition_variable & queue_signal;
+  std::deque <char> queue;
+  std::mutex queue_mutex;
+  std::condition_variable queue_signal;
   std::atomic <bool> am_thread_busy;
   am_thread_busy=false;
-  std::thread am_thread(
-    am_main(
-      terminate_am_thread,
-      queue,
-      queue_mutex,
-      queue_signal,
-      morse_table,
-      wpm,
-      am_thread_busy
-    )
+  std::thread am_thread(am_main,
+    std::ref(terminate_am_thread),
+    std::ref(queue),
+    std::ref(queue_mutex),
+    std::ref(queue_signal),
+    std::ref(morse_table),
+    std::ref(wpm),
+    std::ref(am_thread_busy)
   );
 
   // Push text into AM thread
