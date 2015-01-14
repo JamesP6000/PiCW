@@ -94,8 +94,6 @@ volatile unsigned *allof7e = NULL;
 #define DMABASE (0x7E007000)
 #define PWMBASE  (0x7e20C000) /* PWM controller */
 
-//typedef enum {WSPR,TONE} mode_type;
-
 struct GPCTL {
     char SRC         : 4;
     char ENAB        : 1;
@@ -135,10 +133,6 @@ struct PageInfo {
     void* p;  // physical address
     void* v;   // virtual address
 };
-
-//struct PageInfo constPage;
-//struct PageInfo instrPage;
-//struct PageInfo instrs[1024];
 
 // Get the physical address of a page of virtual memory
 void getRealMemPage(void** vAddr, void** pAddr) {
@@ -265,7 +259,7 @@ void txSym(
 }
 
 void unSetupDMA(){
-    printf("exiting\n");
+    //printf("exiting\n");
     struct DMAregs* DMA0 = (struct DMAregs*)&(ACCESS(DMABASE));
     DMA0->CS =1<<31;  // reset dma controller
     txoff();
@@ -439,7 +433,7 @@ void setupDMA(
 
 
 //
-// Set up a memory regions to access GPIO
+// Set up memory regions to access GPIO
 //
 void setup_io(
   int & mem_fd,
@@ -635,38 +629,21 @@ void wait_every(int minute)
 */
 
 void print_usage() {
-  cout << "Usage:" << endl;
-  cout << "  PiCW [options] \"MORSE TEXT TO SEND\"" << endl;
-  cout << endl;
-  cout << "Options:" << endl;
-  cout << "  -h --help" << endl;
-  cout << "    Print out this help screen." << endl;
-  cout << "  -f --freq f" << endl;
-  cout << "    Specify the frequency to be used for the transmission" << endl;
-  cout << "  -w --wpm w" << endl;
-  cout << "    Specify the transmission speed in Words Per Minute" << endl;
-  cout << "  -p --ppm ppm" << endl;
-  cout << "    Known PPM correction to 19.2MHz RPi nominal crystal frequency." << endl;
-  cout << "  -s --self-calibration" << endl;
-  cout << "    Call ntp_adjtime() periodically to obtain the PPM error of the crystal." << endl;
+  std::cout << "Usage:" << std::endl;
+  std::cout << "  PiCW [options] \"MORSE TEXT TO SEND\"" << std::endl;
+  std::cout << std::endl;
+  std::cout << "Options:" << std::endl;
+  std::cout << "  -h --help" << std::endl;
+  std::cout << "    Print out this help screen." << std::endl;
+  std::cout << "  -f --freq f" << std::endl;
+  std::cout << "    Specify the frequency to be used for the transmission" << std::endl;
+  std::cout << "  -w --wpm w" << std::endl;
+  std::cout << "    Specify the transmission speed in Words Per Minute" << std::endl;
+  std::cout << "  -p --ppm ppm" << std::endl;
+  std::cout << "    Known PPM correction to 19.2MHz RPi nominal crystal frequency." << std::endl;
+  std::cout << "  -s --self-calibration" << std::endl;
+  std::cout << "    Call ntp_adjtime() periodically to obtain the PPM error of the crystal." << std::endl;
 }
-
-// From StackOverflow:
-// http://stackoverflow.com/questions/478898/how-to-execute-a-command-and-get-output-of-command-within-c
-/*
-std::string exec(const char * cmd) {
-    FILE* pipe = popen(cmd, "r");
-    if (!pipe) return "ERROR";
-    char buffer[128];
-    std::string result = "";
-    while (!feof(pipe)) {
-      if (fgets(buffer, 128, pipe) != NULL)
-        result += buffer;
-    }
-    pclose(pipe);
-    return result;
-}
-*/
 
 void parse_commandline(
   // Inputs
@@ -708,7 +685,7 @@ void parse_commandline(
       case 0:
         // Code should only get here if a long option was given a non-null
         // flag value.
-        cout << "Check code!" << endl;
+        std::cout << "Check code!" << std::endl;
         ABORT(-1);
         break;
       case 'h':
@@ -718,21 +695,21 @@ void parse_commandline(
       case 'f':
         freq=strtod(optarg,&endp);
         if ((optarg==endp)||(*endp!='\0')) {
-          cerr << "Error: could not parse frequency" << endl;
+          std::cerr << "Error: could not parse frequency" << std::endl;
           ABORT(-1);
         }
         break;
       case 'w':
         wpm=strtod(optarg,&endp);
         if ((optarg==endp)||(*endp!='\0')) {
-          cerr << "Error: could not parse wpm value" << endl;
+          std::cerr << "Error: could not parse wpm value" << std::endl;
           ABORT(-1);
         }
         break;
       case 'p':
         ppm=strtod(optarg,&endp);
         if ((optarg==endp)||(*endp!='\0')) {
-          cerr << "Error: could not parse ppm value" << endl;
+          std::cerr << "Error: could not parse ppm value" << std::endl;
           ABORT(-1);
         }
         break;
@@ -759,22 +736,22 @@ void parse_commandline(
 
   // Check consistency among command line options.
   if (ppm&&self_cal) {
-    cout << "Warning: ppm value is being ignored!" << endl;
+    std::cout << "Warning: ppm value is being ignored!" << std::endl;
     ppm=0.0;
   }
 
   // Print a summary of the parsed options
-  cout << "PiCW parsed command line options:" << endl;
-  stringstream temp;
+  std::cout << "PiCW parsed command line options:" << std::endl;
+  std::stringstream temp;
   temp << setprecision(6) << fixed;
   temp << freq/1e6 << " MHz";
-  cout << "  TX frequency: " << temp.str() << endl;
+  std::cout << "  TX frequency: " << temp.str() << std::endl;
   temp.str("");
-  cout << "  WPM: " << wpm << endl;
+  std::cout << "  WPM: " << wpm << std::endl;
   if (self_cal) {
-    temp << "  ntp_adjtime() will be used to periodically calibrate the transmission frequency" << endl;
+    temp << "  ntp_adjtime() will be used to periodically calibrate the transmission frequency" << std::endl;
   } else if (ppm) {
-    temp << "  PPM value to be used for all transmissions: " << ppm << endl;
+    temp << "  PPM value to be used for all transmissions: " << ppm << std::endl;
   }
 }
 
@@ -790,16 +767,16 @@ void update_ppm(
   status = ntp_adjtime(&ntx);
 
   if (status != TIME_OK) {
-    //cerr << "Error: clock not synchronized" << endl;
+    //cerr << "Error: clock not synchronized" << std::endl;
     //return;
   }
 
   ppm_new = (double)ntx.freq/(double)(1 << 16); /* frequency scale */
   if (abs(ppm_new)>200) {
-    cerr << "Warning: absolute ppm value is greater than 200 and is being ignored!" << endl;
+    std::cerr << "Warning: absolute ppm value is greater than 200 and is being ignored!" << std::endl;
   } else {
     if (ppm!=ppm_new) {
-      cout << "  Obtained new ppm value: " << ppm_new << endl;
+      std::cout << "  Obtained new ppm value: " << ppm_new << std::endl;
     }
     ppm=ppm_new;
   }
@@ -984,8 +961,8 @@ void send_dit_dah(
   // to spread out the harmonics that are created.
   const double jitter_factor=0.1;
   std::uniform_real_distribution<> dis(0,jitter_factor*dot_duration_sec);
-  const double jitter1=dis(gen);
-  const double jitter2=dis(gen);
+  const double jitter_rise=dis(gen);
+  const double jitter_fall=dis(gen);
 
   // Calculate the rise and fall ramps.
   static bool initialized=false;
@@ -1005,13 +982,13 @@ void send_dit_dah(
   std::chrono::high_resolution_clock::time_point ref=std::chrono::high_resolution_clock::now();
 
   // Delay the rising ramp.
-  std::this_thread::sleep_until(ref+jitter1);
+  std::this_thread::sleep_until(ref+jitter_rise);
   if (terminate) {
     return;
   }
   // Rising ramp.
   for (auto & tv:rise) {
-    std::this_thread::sleep_until(ref+jitter1+tv.time);
+    std::this_thread::sleep_until(ref+jitter_rise1+tv.time);
     if (terminate) {
       return;
     }
@@ -1019,13 +996,13 @@ void send_dit_dah(
   }
   // Keep transmitting at full power until after the flat portion and after
   // the second jitter delay.
-  std::this_thread::sleep_until(ref+jitter1+ramp_time+flat_time+jitter2);
+  std::this_thread::sleep_until(ref+ramp_time+flat_time+jitter_fall);
   if (terminate) {
     return;
   }
   // Falling ramp.
   for (auto & tv:fall) {
-    std::this_thread::sleep_until(ref+jitter1+ramp_time+flat_time+jitter2+tv.time);
+    std::this_thread::sleep_until(ref+ramp_time+flat_time+jitter_fall+tv.time);
     if (terminate) {
       return;
     }
@@ -1053,6 +1030,7 @@ void am_main(
   while (true) {
     busy=false;
 
+    // Get the next character from the queue.
     char tx_char='\0';
     {
       std::unique_lock <std::mutex> lock(queue_mutex);
@@ -1070,6 +1048,7 @@ void am_main(
       busy=true;
     }
 
+    // Sample (and hold) wpm.
     const double dot_duration_sec=1.2/wpm;
 
     // Handle whitespace.
@@ -1086,18 +1065,19 @@ void am_main(
     prev_char_whitespace=false;
 
     if (morse_table.find(tx_char)==morse_table.end()) {
-      // We should never get here...
+      // We should never get here... Only characters in morse code table
+      // should ever get forwarded here.
       MARK;
       ABORT(-1);
     }
 
-    // See if we have already waited enough.
+    // See if we have already waited enough time between characters.
     if (std::chrono::high_resolution_clock::now()>=earliest_tx_time) {
       earliest_tx_time=std::chrono::high_resolution_clock::now();
     }
 
     // Send the dits and dahs
-    const string tx_pattern=morse_table[tx_char];
+    const std::string tx_pattern=morse_table[tx_char];
     for (unsigned int t=0;t<tx_pattern.length();t++) {
       std::this_thread::sleep_until(earliest_tx_time);
       if (terminate) {
@@ -1181,7 +1161,7 @@ int main(const int argc, char * const argv[]) {
   double wpm_init;
   double ppm_init;
   bool self_cal;
-  string str;
+  std::string str;
   parse_commandline(
     argc,
     argv,
@@ -1191,11 +1171,6 @@ int main(const int argc, char * const argv[]) {
     self_cal,
     str
   );
-
-  std::atomic <double> tone_freq;
-  tone_freq=freq_init;
-  std::atomic <double> wpm;
-  wpm=wpm_init;
 
   // Initial configuration
   int mem_fd;
@@ -1212,7 +1187,7 @@ int main(const int argc, char * const argv[]) {
               0x20000000  //base
           );
   if ((long int)allof7e==-1) {
-    cerr << "Error: mmap error!" << endl;
+    std::cerr << "Error: mmap error!" << std::endl;
     ABORT(-1);
   }
   txon();
@@ -1222,8 +1197,15 @@ int main(const int argc, char * const argv[]) {
   setupDMA(constPage,instrPage,instrs);
   txoff();
 
+  // Morse code table.
   std::map <char,std::string> & morse_table;
   morse_table_init(morse_table);
+
+  // Atomics used for IPC
+  std::atomic <double> tone_freq;
+  tone_freq=freq_init;
+  std::atomic <double> wpm;
+  wpm=wpm_init;
 
   // Start tone thread.
   std::atomic <bool> terminate_tone_thread;
@@ -1263,7 +1245,7 @@ int main(const int argc, char * const argv[]) {
   {
     std::unique_lock <std::mutex> lock(queue_mutex);
     for (unsigned int t=0;t<str.length();t++) {
-      char ch=to_upper(str[t]);
+      char ch=toupper(str[t]);
       if ((ch==' ')||(ch=='\n')||(morse_table.find(ch)!=morse_table.end())) {
         queue.push_back(ch);
       }
