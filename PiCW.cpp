@@ -1,22 +1,23 @@
 // See accompanying README and BUILD files for descriptions on how to use this
 // code.
 
-/*
-License:
-  This program is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 2 of the License, or
-  (at your option) any later version.
+// License:
+//   This program is free software: you can redistribute it and/or modify
+//   it under the terms of the GNU General Public License as published by
+//   the Free Software Foundation, either version 2 of the License, or
+//   (at your option) any later version.
+//
+//   This program is distributed in the hope that it will be useful,
+//   but WITHOUT ANY WARRANTY; without even the implied warranty of
+//   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//   GNU General Public License for more details.
+//
+//   You should have received a copy of the GNU General Public License
+//   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-*/
+// Authors:
+//   Oliver Mattos, Oskar Weigl, Dan Ankers (MD1CLV), Guido (PE1NNZ),
+//   Michael Tatarinov, James Peroulas (AB0JP)
 
 #include <map>
 #include <deque>
@@ -102,22 +103,6 @@ volatile unsigned *allof7e = NULL;
 #define DMABASE (0x7E007000)
 #define PWMBASE  (0x7e20C000) /* PWM controller */
 
-// g++ 4.7 in c++11 mode had trouble with this struct. I removed it
-// and used bit shifts to create the word to be written.
-/*
-struct GPCTL {
-    char SRC         : 4;
-    char ENAB        : 1;
-    char KILL        : 1;
-    char             : 1;
-    char BUSY        : 1;
-    char FLIP        : 1;
-    char MASH        : 2;
-    unsigned int     : 13;
-    char PASSWD      : 8;
-};
-*/
-
 struct CB {
     volatile unsigned int TI;
     volatile unsigned int SOURCE_AD;
@@ -170,64 +155,6 @@ void freeRealMemPage(void* vAddr) {
     munlock(vAddr, 4096);  // unlock ram.
 
     free(vAddr);
-}
-
-void txon()
-{
-    SETBIT(GPFSEL0 , 14);
-    CLRBIT(GPFSEL0 , 13);
-    CLRBIT(GPFSEL0 , 12);
-
-    // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
-    //ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 0;  //2mA -3.4dBm
-    //ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 1;  //4mA +2.1dBm
-    //ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 2;  //6mA +4.9dBm
-    //ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 3;  //8mA +6.6dBm(default)
-    //ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 4;  //10mA +8.2dBm
-    //ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 5;  //12mA +9.2dBm
-    //ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 6;  //14mA +10.0dBm
-    ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 7;  //16mA +10.6dBm
-
-    //struct GPCTL setupword = {6/*SRC*/, 1, 0, 0, 0, 3,0x5a};
-    //ACCESS(CM_GP0CTL) = *((int*)&setupword);
-    ACCESS(CM_GP0CTL) =
-      // PW
-      (0x5a<<24) |
-      // MASH
-      (3<<9) |
-      // Flip
-      (0<<8) |
-      // Busy
-      (0<<7) |
-      // Kill
-      (0<<5) |
-      // Enable
-      (1<<4) |
-      // SRC
-      (6<<0)
-    ;
-}
-
-void txoff()
-{
-    //struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
-    //ACCESS(CM_GP0CTL) = *((int*)&setupword);
-    ACCESS(CM_GP0CTL) =
-      // PW
-      (0x5a<<24) |
-      // MASH
-      (1<<9) |
-      // Flip
-      (0<<8) |
-      // Busy
-      (0<<7) |
-      // Kill
-      (0<<5) |
-      // Enable
-      (0<<4) |
-      // SRC
-      (6<<0)
-    ;
 }
 
 // Transmit tone tone_freq for tsym seconds.
@@ -306,7 +233,23 @@ void unSetupDMA(){
     //printf("exiting\n");
     struct DMAregs* DMA0 = (struct DMAregs*)&(ACCESS(DMABASE));
     DMA0->CS =1<<31;  // reset dma controller
-    txoff();
+    // Turn off GPIO clock
+    ACCESS(CM_GP0CTL) =
+      // PW
+      (0x5a<<24) |
+      // MASH
+      (1<<9) |
+      // Flip
+      (0<<8) |
+      // Busy
+      (0<<7) |
+      // Kill
+      (0<<5) |
+      // Enable
+      (0<<4) |
+      // SRC
+      (6<<0)
+    ;
 }
 
 void handSig(const int h) {
@@ -440,7 +383,6 @@ void setupDMA(
    DMA0->CS =(1<<0)|(255 <<16);  // enable bit = 0, clear end flag = 1, prio=19-16
 }
 
-
 //
 // Set up memory regions to access GPIO
 //
@@ -512,21 +454,23 @@ void setup_gpios(
 
 void print_usage() {
   std::cout << "Usage:" << std::endl;
-  std::cout << "  PiCW [options] \"MORSE TEXT TO SEND\"" << std::endl;
+  std::cout << "  PiCW [options] \"text to send in Morse code\"" << std::endl;
   std::cout << std::endl;
   std::cout << "Options:" << std::endl;
   std::cout << "  -h --help" << std::endl;
   std::cout << "    Print out this help screen." << std::endl;
   std::cout << "  -f --freq f" << std::endl;
-  std::cout << "    Specify the frequency to be used for the transmission" << std::endl;
+  std::cout << "    Specify the frequency to be used for the transmission." << std::endl;
   std::cout << "  -w --wpm w" << std::endl;
-  std::cout << "    Specify the transmission speed in Words Per Minute" << std::endl;
+  std::cout << "    Specify the transmission speed in Words Per Minute (default 20 WPM)." << std::endl;
   std::cout << "  -p --ppm ppm" << std::endl;
   std::cout << "    Known PPM correction to 19.2MHz RPi nominal crystal frequency." << std::endl;
   std::cout << "  -s --self-calibration" << std::endl;
   std::cout << "    Call ntp_adjtime() periodically to obtain the PPM error of the crystal." << std::endl;
   std::cout << "  -d --ditdit" << std::endl;
-  std::cout << "    Transmit an endless series of dits. Can be used to measure TX spectrum" << std::endl;
+  std::cout << "    Transmit an endless series of dits. Can be used to measure TX spectrum." << std::endl;
+  std::cout << "  -t --test-tone" << std::endl;
+  std::cout << "    Continuously transmit a test tone at the requested frequency." << std::endl;
 }
 
 void parse_commandline(
@@ -539,7 +483,8 @@ void parse_commandline(
   double & ppm,
   bool & self_cal,
   std::string & str,
-  bool & ditdit
+  bool & ditdit,
+  bool & test_tone
 ) {
   // Default values
   tone_freq=NAN;
@@ -548,6 +493,7 @@ void parse_commandline(
   self_cal=false;
   str="";
   ditdit=false;
+  test_tone=false;
 
   static struct option long_options[] = {
     {"help",             no_argument,       0, 'h'},
@@ -556,6 +502,7 @@ void parse_commandline(
     {"ppm",              required_argument, 0, 'p'},
     {"self-calibration", no_argument,       0, 's'},
     {"ditdit",           no_argument,       0, 'd'},
+    {"test-tone",        no_argument,       0, 't'},
     {0, 0, 0, 0}
   };
 
@@ -606,6 +553,9 @@ void parse_commandline(
       case 'd':
         ditdit=true;
         break;
+      case 't':
+        test_tone=true;
+        break;
       case '?':
         /* getopt_long already printed an error message. */
         ABORT(-1);
@@ -633,10 +583,15 @@ void parse_commandline(
     ABORT(-1);
   }
   if ((!str.empty())&&ditdit) {
-  MARK;
-  std::cout << str << std::endl;
-  MARK;
     std::cerr << "Error: cannot transmit text when ditdit mode is requested" << std::endl;
+    ABORT(-1);
+  }
+  if ((!str.empty())&&test_tone) {
+    std::cerr << "Error: cannot transmit text when test-tone mode is requested" << std::endl;
+    ABORT(-1);
+  }
+  if (test_tone&&ditdit) {
+    std::cerr << "Error: cannot request test-tone and ditdit modes at the same time" << std::endl;
     ABORT(-1);
   }
 
@@ -647,7 +602,9 @@ void parse_commandline(
   temp << tone_freq/1e6 << " MHz";
   std::cout << "  TX frequency: " << temp.str() << std::endl;
   temp.str("");
-  std::cout << "  WPM: " << wpm << std::endl;
+  if (!test_tone) {
+    std::cout << "  WPM: " << wpm << std::endl;
+  }
   if (self_cal) {
     temp << "  ntp_adjtime() will be used to periodically calibrate the transmission frequency" << std::endl;
   } else if (ppm) {
@@ -655,6 +612,8 @@ void parse_commandline(
   }
   if (ditdit) {
     std::cout << "Will transmit an endless series of dits. CTRL-C to exit." << std::endl;
+  } else if (test_tone) {
+    std::cout << "Will transmit continuous tone on frequency. CTRL-C to exit." << std::endl;
   } else {
     std::cout << "Message to be sent:" << std::endl;
     std::cout << '"' << str << '"' << std::endl;
@@ -746,12 +705,15 @@ void tone_main(
   }
 }
 
+// The rise and fall ramps are stored as collections of time/value pairs.
 class time_value {
   public:
     std::chrono::duration <double> time;
     unsigned int value;
 };
 
+// Rectangular ramp that simply goes high or low in the middle of the ramp
+// period.
 void rectangle(
   const double & width_secs,
   std::vector <time_value> & rise,
@@ -787,24 +749,7 @@ void rectangle(
   }
 }
 
-// Raised cosine pulse shapes.
-// Rise:
-//y=(-cos(t*pi)+1)/2;
-//2*y-1=-cos(t*pi);
-//1-2*y=cos(t*pi);
-//acos(1-2*y)=t*pi;
-//acos(1-2*y)/pi=t;
-// Fall:
-//y=1-(-cos(t*pi)+1)/2;
-//y-1=-(-cos(t*pi)+1)/2;
-//2*y-2=-(-cos(t*pi)+1);
-//2-2*y=-cos(t*pi)+1;
-//1-2*y=-cos(t*pi);
-//2*y-1=cos(t*pi);
-//acos(2*y-1)=t*pi;
-//acos(2*y-1)/pi=t;
-// Instead of uniform sampling of the x axis, we're using uniform
-// sampling of the y axis.
+// Raised cosine rise/ fall ramps.
 void raised_cosine(
   const double & width_secs,
   std::vector <time_value> & rise,
@@ -852,8 +797,7 @@ void set_current(
     value=8;
   }
   if (value==0) {
-    //struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
-    //ACCESS(CM_GP0CTL) = *((int*)&setupword);
+    // Turn off output
     ACCESS(CM_GP0CTL) =
       // PW
       (0x5a<<24) |
@@ -871,9 +815,9 @@ void set_current(
       (6<<0)
     ;
   } else {
+    // Set drive strength
     ACCESS(PADS_GPIO_0_27) = 0x5a000018 + ((value - 1)&0x7);
-    //struct GPCTL setupword = {6/*SRC*/, 1, 0, 0, 0, 3,0x5a};
-    //ACCESS(CM_GP0CTL) = *((int*)&setupword);
+    // Turn on output
     ACCESS(CM_GP0CTL) =
       // PW
       (0x5a<<24) |
@@ -913,7 +857,7 @@ void send_dit_dah(
   const std::chrono::duration <double> jitter_rise(dis(gen));
   const std::chrono::duration <double> jitter_fall(dis(gen));
 
-  // Calculate the rise and fall ramps.
+  // Calculate the rise and fall ramps, if needed.
   static bool initialized=false;
   static std::chrono::duration <double> ramp_time_prev(0);
   static std::vector <time_value> rise;
@@ -935,7 +879,7 @@ void send_dit_dah(
     initialized=true;
   }
 
-  // Pulse will be timed relative to the current time.
+  // Dit or dah pulse will be timed relative to the current time.
   std::chrono::high_resolution_clock::time_point ref=std::chrono::high_resolution_clock::now();
 
   // Delay the rising ramp.
@@ -978,8 +922,21 @@ void am_main(
   std::map <char,std::string> & morse_table,
   std::atomic <double> & wpm,
   std::atomic <bool> & busy,
-  const bool & ditdit
+  const bool & ditdit,
+  const bool & test_tone
 ) {
+  // In the case of a test tone, set the drive strength to maximum and
+  // turn on output. Nothing else.
+  if (test_tone) {
+    set_current(8);
+    while (true) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      if (terminate) {
+        return;
+      }
+    }
+  }
+
   bool prev_char_whitespace=true;
   std::chrono::time_point <std::chrono::high_resolution_clock,std::chrono::duration <double>> earliest_tx_time=std::chrono::high_resolution_clock::now();
 
@@ -1043,14 +1000,12 @@ void am_main(
     } else {
       tx_pattern=morse_table[tx_char];
     }
-    bool printed=false;
     for (unsigned int t=0;t<tx_pattern.length();t++) {
       std::this_thread::sleep_until(earliest_tx_time);
       if (terminate) {
         return;
       }
-      if ((!ditdit)&&(!printed)) {
-        printed=true;
+      if ((!ditdit)&&(t==0)) {
         std::cout << tx_char;
         std::cout.flush();
       }
@@ -1065,11 +1020,11 @@ void am_main(
         t=0;
       }
     }
-    earliest_tx_time+=std::chrono::duration <double> (3*dot_duration_sec);
-
+    earliest_tx_time+=std::chrono::duration <double> (2*dot_duration_sec);
   }
 }
 
+// Initialize the morse code table.
 void morse_table_init(
   std::map <char,std::string> & morse_table
 ) {
@@ -1127,16 +1082,14 @@ void morse_table_init(
 }
 
 int main(const int argc, char * const argv[]) {
-  // Initialize the RNG
-  //srand(time(NULL));
-
   // Parse arguments
   double freq_init;
   double wpm_init;
   double ppm_init;
   bool self_cal;
-  bool ditdit;
   std::string str;
+  bool ditdit;
+  bool test_tone;
   parse_commandline(
     argc,
     argv,
@@ -1145,7 +1098,8 @@ int main(const int argc, char * const argv[]) {
     ppm_init,
     self_cal,
     str,
-    ditdit
+    ditdit,
+    test_tone
   );
 
   // Initial configuration
@@ -1167,53 +1121,14 @@ int main(const int argc, char * const argv[]) {
     ABORT(-1);
   }
 
-  //txon();
+  // Configure GPIO4
   SETBIT(GPFSEL0 , 14);
   CLRBIT(GPFSEL0 , 13);
   CLRBIT(GPFSEL0 , 12);
-  // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
-  /*
-  ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 0;  //2mA -3.4dBm
-  ACCESS(CM_GP0CTL) =
-    // PW
-    (0x5a<<24) |
-    // MASH
-    (3<<9) |
-    // Flip
-    (0<<8) |
-    // Busy
-    (0<<7) |
-    // Kill
-    (0<<5) |
-    // Enable
-    (0<<4) |
-    // SRC
-    (6<<0)
-  ;
-  */
   struct PageInfo constPage;
   struct PageInfo instrPage;
   struct PageInfo instrs[1024];
   setupDMA(constPage,instrPage,instrs);
-  //txoff();
-  /*
-  ACCESS(CM_GP0CTL) =
-    // PW
-    (0x5a<<24) |
-    // MASH
-    (1<<9) |
-    // Flip
-    (0<<8) |
-    // Busy
-    (0<<7) |
-    // Kill
-    (0<<5) |
-    // Enable
-    (0<<4) |
-    // SRC
-    (6<<0)
-  ;
-  */
 
   // Morse code table.
   std::map <char,std::string> morse_table;
@@ -1242,7 +1157,6 @@ int main(const int argc, char * const argv[]) {
   while (!tone_thread_ready) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
-  //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
   // Start AM thread
   std::atomic <bool> terminate_am_thread;
@@ -1260,7 +1174,8 @@ int main(const int argc, char * const argv[]) {
     std::ref(morse_table),
     std::ref(wpm),
     std::ref(am_thread_busy),
-    ditdit
+    ditdit,
+    test_tone
   );
 
   // Push text into AM thread
@@ -1275,8 +1190,8 @@ int main(const int argc, char * const argv[]) {
     queue_signal.notify_one();
   }
 
-  // In ditdit mode, can only exit using ctrl-c.
-  while (ditdit) {
+  // In ditdit or test-tone mode, can only exit using ctrl-c.
+  while (ditdit||test_tone) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
   }
 

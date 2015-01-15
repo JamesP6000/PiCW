@@ -1,0 +1,169 @@
+Raspberry Pi bareback LF/MF/HF/VHF CW (Morse code) transmitter
+
+Makes a very simple Morse Code transmitter from your RasberryPi by connecting
+GPIO port 4 to Antenna (and LPF). Operates on LF, MF, HF and VHF bands from 0
+to 250 MHz.
+
+******
+Installation / update:
+******
+  Simple instructions assuming you have all the prerequisites installed:
+    git clone https://github.com/JamesP6000/PiCW.git
+    cd PiCW
+    make
+
+  See the accompanying BUILD file for more details.
+
+******
+Example usage:
+******
+  Brief help screen
+    PiCW --help
+
+  Send the Morse code message "TEST DE N9NNN" on carrier frequency 10.140 MHz
+  using the default rate of 20 WPM:
+    sudo PiCW --freq 10.140e6 TEST DE N9NNN
+
+  As above, but this time use NTP to calibrate the TX frequency:
+    sudo PiCW --freq 10.140e6 --self-calibration TEST DE N9NNN
+
+  Transmit an endless series of dits at 60 WPM. Can be used to measure the
+  worst case frequency domain performance of the transmitter.
+    sudo PiCW --freq 10.140e6 --ditdit --wpm 60
+
+******
+"PiCW --help" output:
+******
+  Usage:
+    PiCW [options] "text to send in Morse code"
+
+  Options:
+    -h --help
+      Print out this help screen.
+    -f --freq f
+      Specify the frequency to be used for the transmission.
+    -w --wpm w
+      Specify the transmission speed in Words Per Minute (default 20 WPM).
+    -p --ppm ppm
+      Known PPM correction to 19.2MHz RPi nominal crystal frequency.
+    -s --self-calibration
+      Call ntp_adjtime() periodically to obtain the PPM error of the crystal.
+    -d --ditdit
+      Transmit an endless series of dits. Can be used to measure TX spectrum.
+    -t --test-tone
+      Continuously transmit a test tone at the requested frequency.
+
+******
+Radio licensing / RF:
+******
+  In order to transmit legally, a HAM Radio License is REQUIRED for running
+  this experiment. The output is a square wave so a low pass filter is REQUIRED.
+  Connect a low-pass filter (via decoupling C) to GPIO4 (GPCLK0) and a ground
+  pin of your Raspberry Pi, then connect an antenna to the LPF. The GPIO4 and
+  GND pins are found on header P1 pin 7 and 9 respectively, the pin closest to
+  P1 label is pin 1 and its 3rd and 4th neighbour is pin 7 and 9 respectively.
+  See this link for pin layout: http://elinux.org/RPi_Low-level_peripherals
+  Examples of low-pass filters can be found here:
+  http://www.gqrp.com/harmonic_filters.pdf
+
+  The expected power output is 10mW (+10dBm) in a 50 Ohm load. This looks
+  neglible, but when connected to a simple dipole antenna this may result in
+  reception reports ranging up to several thousands of kilometers.
+
+  As the Raspberry Pi does not attenuate ripple and noise components from the
+  5V USB power supply, it is RECOMMENDED to use a regulated supply that has
+  sufficient ripple supression. Supply ripple might be seen as mixing products
+  centered around the transmit carrier typically at 100/120Hz.
+
+  DO NOT expose GPIO4 to voltages or currents that are above the specified
+  Absolute Maximum limits. GPIO4 outputs a digital clock in 3V3 logic, with a
+  maximum current of 16mA. As there is no current protection available and a DC
+  component of 1.6V, DO NOT short-circuit or place a resistive (dummy) load
+  straight on the GPIO4 pin, as it may draw too much current. Instead, use a
+  decoupling capacitor to remove DC component when connecting the output to
+  dummy loads, transformers, antennas, etc. DO NOT expose GPIO4 to electro-
+  static voltages or voltages exceeding the 0 to 3.3V logic range. Connecting
+  an antenna directly to GPIO4 may damage your RPi due to transient voltages
+  such as lightning or static buildup as well as RF from other transmitters
+  operating into nearby antennas. Therefore it is RECOMMENDED to add some form
+  of isolation, e.g. by using a RF transformer, a simple buffer/driver/PA
+  stage, two schottky small signal diodes back to back.
+
+******
+Calibration:
+******
+  Frequency calibration is HIGHLY recommended to ensure that your
+  transmissions lie within the CW band you are targetting.
+
+  NTP calibration:
+  NTP automatically tracks and calculates a PPM frequency correction. If your
+  Pi is connected to the internet and you are running NTP, you can use the
+  --self-calibration option to have PiCW periodically querry NTP for the latest
+  frequency correction. Some residual frequency error may still be present
+  due to delays in the NTP measurement loop. This method works best if your
+  Pi has been on for a long time, the crystal's temperature has stabilized,
+  and the NTP control loop has converged.
+
+  AM calibration:
+  A practical way to calibrate is to tune the transmitter on the same frequency
+  of a medium wave AM broadcast station. Keep tuning until you zero beat (the
+  constant audio tone disappears when the transmitter is exactly on the same
+  frequency as the broadcast station), and determine the frequency difference
+  with the broadcast station. This is the frequency error that can be applied
+  for correction while tuning on a WSPR frequency.
+
+  Suppose your local AM radio station is at 780kHz. Use the --test-tone option
+  to produce different tones around 780kHz (eg 780100 Hz) until you can
+  successfully zero beat the AM station. If the zero beat tone specified on the
+  command line is F, calculate the PPM correction required as:
+  ppm=(F/780000-1)*1e6 In the future, specify this value as the argument to the
+  --ppm option on the command line.
+
+******
+PWM Peripheral:
+******
+  The code uses the RPi PWM peripheral to time the frequency transitions
+  of the output clock. This peripheral is also used by the RPi sound system
+  and hence any sound events that occur during transmission will
+  interfere with CW transmissions. Sound can be permanently disabled
+  by editing /etc/modules and commenting out the snd-bcm2835 device.
+
+******
+Reference documentation:
+******
+  http://www.raspberrypi.org/wp-content/uploads/2012/02/BCM2835-ARM-Peripherals.pdf
+  http://www.scribd.com/doc/127599939/BCM2835-Audio-clocks
+  http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
+  https://github.com/mgottschlag/vctools/blob/master/vcdb/cm.yaml
+  https://www.kernel.org/doc/Documentation/vm/pagemap.txt
+
+******
+History/Credits:
+******
+  Credits go to Oliver Mattos and Oskar Weigl who implemented PiFM based on
+  the idea of exploiting RPi DPLL as FM transmitter.
+  http://www.icrobotics.co.uk/wiki/index.php/Turning_the_Raspberry_Pi_Into_an_FM_Transmitter
+
+  Dan MD1CLV combined this effort with WSPR encoding algorithm from F8CHK,
+  resulting in WsprryPi a WSPR beacon for LF and MF bands.
+  https://github.com/DanAnkers/WsprryPi
+
+  Guido PE1NNZ <pe1nnz@amsat.org> extended this effort with DMA based PWM
+  modulation of fractional divider that was part of PiFM, allowing to operate
+  the WSPR beacon also on HF and VHF bands.  In addition time-synchronisation
+  and double amount of power output was implemented.
+  https://github.com/threeme3/WsprryPi
+
+  James Peroulas <james@peroulas.com> added several command line options, a
+  makefile, improved frequency generation precision so as to be able to
+  precisely generate a tone at a fraction of a Hz, and a self calibration
+  feature where the code attempts to derrive frequency calibration information
+  from an installed NTP deamon.
+  https://github.com/JamesP6000/WsprryPi
+
+  Michael Tatarinov for adding a patch to get PPM info directly from the
+  kernel.
+
+  James Peroulas <james@peroulas.com> created PiCW.
+  https://github.com/JamesP6000/PiCW
+
