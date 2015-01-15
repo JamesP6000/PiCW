@@ -363,7 +363,6 @@ void setupDMATab(
   // Create DMA table of tuning words. WSPR tone i will use entries 2*i and
   // 2*i+1 to generate the appropriate tone.
   /*
-  dma_table_freq.resize(1024);
   double tone0_freq=center_freq_actual-1.5*tone_spacing;
   vector <long int> tuning_word(1024);
   for (int i=0;i<8;i++) {
@@ -382,12 +381,13 @@ void setupDMATab(
   */
 
   // Program the table
+  dma_table_freq.resize(1024);
   for (int i=0;i<1024;i++) {
     dma_table_freq[i]=plld_actual_freq/(tuning_word[i]/pow(2.0,12));
     ((int*)(constPage.v))[i] = (0x5a<<24)+tuning_word[i];
-    if ((i%2==0)&&(i<8)) {
-      assert((tuning_word[i]&(~0xfff))==(tuning_word[i+1]&(~0xfff)));
-    }
+    //if ((i%2==0)&&(i<8)) {
+    //  assert((tuning_word[i]&(~0xfff))==(tuning_word[i+1]&(~0xfff)));
+    //}
   }
 }
 
@@ -701,7 +701,7 @@ void parse_commandline(
   std::string & str
 ) {
   // Default values
-  tone_freq=0;
+  tone_freq=NAN;
   wpm=20;
   ppm=0;
   self_cal=false;
@@ -774,13 +774,17 @@ void parse_commandline(
     if (!str.empty()) {
       str+=" ";
     }
-    str==argv[optind++];
+    str+=argv[optind++];
   }
 
   // Check consistency among command line options.
   if (ppm&&self_cal) {
     std::cout << "Warning: ppm value is being ignored!" << std::endl;
     ppm=0.0;
+  }
+  if (isnan(tone_freq)) {
+    std::cerr << "Error: must specify TX frequency (try --help)" << std::endl;
+    ABORT(-1);
   }
 
   // Print a summary of the parsed options
@@ -796,6 +800,8 @@ void parse_commandline(
   } else if (ppm) {
     temp << "  PPM value to be used for all transmissions: " << ppm << std::endl;
   }
+  std::cout << "Message to be sent:" << std::endl;
+  std::cout << '"' << str << '"' << std::endl;
 }
 
 // Call ntp_adjtime() to obtain the latest calibration coefficient.
@@ -819,7 +825,7 @@ void update_ppm(
     std::cerr << "Warning: absolute ppm value is greater than 200 and is being ignored!" << std::endl;
   } else {
     if (ppm!=ppm_new) {
-      std::cout << "  Obtained new ppm value: " << ppm_new << std::endl;
+      //std::cout << "  Obtained new ppm value: " << ppm_new << std::endl;
     }
     ppm=ppm_new;
   }
@@ -863,6 +869,8 @@ void tone_main(
   struct PageInfo instrs[],
   struct PageInfo & constPage
 ) {
+  std::cout << "tone thread started" << std::endl;
+
   // Initialize
   double ppm=ppm_init;
   if (self_cal) {
@@ -1097,6 +1105,8 @@ void am_main(
   std::atomic <double> & wpm,
   std::atomic <bool> & busy
 ) {
+  std::cout << "am thread started" << std::endl;
+
   bool prev_char_whitespace=true;
   std::chrono::time_point <std::chrono::high_resolution_clock,std::chrono::duration <double>> earliest_tx_time=std::chrono::high_resolution_clock::now();
 
@@ -1123,6 +1133,7 @@ void am_main(
       queue.pop_front();
       busy=true;
     }
+    std::cout << "TX char: " << tx_char << std::endl;
 
     // Sample (and hold) wpm.
     const double dot_duration_sec=1.2/wpm;
@@ -1143,7 +1154,6 @@ void am_main(
     if (morse_table.find(tx_char)==morse_table.end()) {
       // We should never get here... Only characters in morse code table
       // should ever get forwarded here.
-      MARK;
       ABORT(-1);
     }
 
@@ -1323,7 +1333,9 @@ int main(const int argc, char * const argv[]) {
       }
     }
     queue_signal.notify_one();
+    std::cout << queue.size() << std::endl;
   }
+  std::cout << queue.size() << std::endl;
 
   // Wait for queue to be emptied.
   while (true) {
