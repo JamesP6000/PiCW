@@ -329,21 +329,6 @@ void setupDMATab(
   std::vector <double> & dma_table_freq,
   struct PageInfo & constPage
 ){
-  // Make sure that the tone can be produced solely by
-  // varying the fractional part of the frequency divider.
-  /*
-  center_freq_actual=center_freq_desired;
-  double div_lo=bit_trunc(plld_actual_freq/(center_freq_desired-1.5*tone_spacing),-12)+pow(2.0,-12);
-  double div_hi=bit_trunc(plld_actual_freq/(center_freq_desired+1.5*tone_spacing),-12);
-  if (floor(div_lo)!=floor(div_hi)) {
-    center_freq_actual=plld_actual_freq/floor(div_lo)-1.6*tone_spacing;
-    stringstream temp;
-    temp << setprecision(6) << fixed << "  Warning: center frequency has been changed to " << center_freq_actual/1e6 << " MHz" << endl;
-    cout << temp.str();
-    cout << "  because of hardware limitations!" << endl;
-  }
-  */
-
   // We only really need two tuning words...
   // TODO: It seems to be safe to change the fractional part of the divisor
   // while the clock generator is enabled. Check to see that it is also safe
@@ -359,26 +344,6 @@ void setupDMATab(
     double div=500+i;
     tuning_word[i]=((int)(div*pow(2.0,12)));
   }
-
-  // Create DMA table of tuning words. WSPR tone i will use entries 2*i and
-  // 2*i+1 to generate the appropriate tone.
-  /*
-  double tone0_freq=center_freq_actual-1.5*tone_spacing;
-  vector <long int> tuning_word(1024);
-  for (int i=0;i<8;i++) {
-    double tone_freq=tone0_freq+(i>>1)*tone_spacing;
-    double div=bit_trunc(plld_actual_freq/tone_freq,-12);
-    if (i%2==0) {
-      div=div+pow(2.0,-12);
-    }
-    tuning_word[i]=((int)(div*pow(2.0,12)));
-  }
-  // Fill the remaining table, just in case...
-  for (int i=8;i<1024;i++) {
-    double div=500+i;
-    tuning_word[i]=((int)(div*pow(2.0,12)));
-  }
-  */
 
   // Program the table
   dma_table_freq.resize(1024);
@@ -544,133 +509,6 @@ void setup_gpios(
     }
 
 }
-
-// Convert string to uppercase
-/*
-void to_upper(char *str)
-{   while(*str)
-    {
-        *str = toupper(*str);
-        str++;
-    }
-}
-*/
-
-// Encode call, locator, and dBm into WSPR codeblock.
-/*
-void wspr(const char* call, const char* l_pre, const char* dbm, unsigned char* symbols)
-{
-   // pack prefix in nadd, call in n1, grid, dbm in n2
-   char* c, buf[16];
-   strncpy(buf, call, 16);
-   c=buf;
-   to_upper(c);
-   unsigned long ng,nadd=0;
-
-   if(strchr(c, '/')){ //prefix-suffix
-     nadd=2;
-     int i=strchr(c, '/')-c; //stroke position
-     int n=strlen(c)-i-1; //suffix len, prefix-call len
-     c[i]='\0';
-     if(n==1) ng=60000-32768+(c[i+1]>='0'&&c[i+1]<='9'?c[i+1]-'0':c[i+1]==' '?38:c[i+1]-'A'+10); // suffix /A to /Z, /0 to /9
-     if(n==2) ng=60000+26+10*(c[i+1]-'0')+(c[i+2]-'0'); // suffix /10 to /99
-     if(n>2){ // prefix EA8/, right align
-       ng=(i<3?36:c[i-3]>='0'&&c[i-3]<='9'?c[i-3]-'0':c[i-3]-'A'+10);
-       ng=37*ng+(i<2?36:c[i-2]>='0'&&c[i-2]<='9'?c[i-2]-'0':c[i-2]-'A'+10);
-       ng=37*ng+(i<1?36:c[i-1]>='0'&&c[i-1]<='9'?c[i-1]-'0':c[i-1]-'A'+10);
-       if(ng<32768) nadd=1; else ng=ng-32768;
-       c=c+i+1;
-     }
-   }
-
-   int i=(isdigit(c[2])?2:isdigit(c[1])?1:0); //last prefix digit of de-suffixed/de-prefixed callsign
-   int n=strlen(c)-i-1; //2nd part of call len
-   unsigned long n1;
-   n1=(i<2?36:c[i-2]>='0'&&c[i-2]<='9'?c[i-2]-'0':c[i-2]-'A'+10);
-   n1=36*n1+(i<1?36:c[i-1]>='0'&&c[i-1]<='9'?c[i-1]-'0':c[i-1]-'A'+10);
-   n1=10*n1+c[i]-'0';
-   n1=27*n1+(n<1?26:c[i+1]-'A');
-   n1=27*n1+(n<2?26:c[i+2]-'A');
-   n1=27*n1+(n<3?26:c[i+3]-'A');
-
-   //if(rand() % 2) nadd=0;
-   if(!nadd){
-     // Copy locator locally since it is declared const and we cannot modify
-     // its contents in-place.
-     char l[4];
-     strncpy(l, l_pre, 4);
-     to_upper(l); //grid square Maidenhead locator (uppercase)
-     ng=180*(179-10*(l[0]-'A')-(l[2]-'0'))+10*(l[1]-'A')+(l[3]-'0');
-   }
-   int p = atoi(dbm);    //EIRP in dBm={0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60}
-   int corr[]={0,-1,1,0,-1,2,1,0,-1,1};
-   p=p>60?60:p<0?0:p+corr[p%10];
-   unsigned long n2=(ng<<7)|(p+64+nadd);
-
-   // pack n1,n2,zero-tail into 50 bits
-   char packed[11] = {n1>>20, n1>>12, n1>>4, ((n1&0x0f)<<4)|((n2>>18)&0x0f),
-n2>>10, n2>>2, (n2&0x03)<<6, 0, 0, 0, 0};
-
-   // convolutional encoding K=32, r=1/2, Layland-Lushbaugh polynomials
-   int k = 0;
-   int j,s;
-   int nstate = 0;
-   unsigned char symbol[176];
-   for(j=0;j!=sizeof(packed);j++){
-      for(i=7;i>=0;i--){
-         unsigned long poly[2] = { 0xf2d05351L, 0xe4613c47L };
-         nstate = (nstate<<1) | ((packed[j]>>i)&1);
-         for(s=0;s!=2;s++){   //convolve
-            unsigned long n = nstate & poly[s];
-            int even = 0;  // even := parity(n)
-            while(n){
-               even = 1 - even;
-               n = n & (n - 1);
-            }
-            symbol[k] = even;
-            k++;
-         }
-      }
-   }
-
-   // interleave symbols
-   const unsigned char npr3[162] = {
-      1,1,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,1,0,0,1,0,1,1,1,1,0,0,0,0,0,
-      0,0,1,0,0,1,0,1,0,0,0,0,0,0,1,0,1,1,0,0,1,1,0,1,0,0,0,1,1,0,1,0,
-      0,0,0,1,1,0,1,0,1,0,1,0,1,0,0,1,0,0,1,0,1,1,0,0,0,1,1,0,1,0,1,0,
-      0,0,1,0,0,0,0,0,1,0,0,1,0,0,1,1,1,0,1,1,0,0,1,1,0,1,0,0,0,1,1,1,
-      0,0,0,0,0,1,0,1,0,0,1,1,0,0,0,0,0,0,0,1,1,0,1,0,1,1,0,0,0,1,1,0,
-      0,0 };
-   for(i=0;i!=162;i++){
-      // j0 := bit reversed_values_smaller_than_161[i]
-      unsigned char j0;
-      p=-1;
-      for(k=0;p!=i;k++){
-         for(j=0;j!=8;j++)   // j0:=bit_reverse(k)
-           j0 = ((k>>j)&1)|(j0<<1);
-         if(j0<162)
-           p++;
-      }
-      symbols[j0]=npr3[j0]|symbol[i]<<1; //interleave and add sync vector
-   }
-}
-*/
-
-// Wait for the system clock's minute to reach one second past 'minute'
-/*
-void wait_every(int minute)
-{
-  time_t t;
-  struct tm* ptm;
-  for(;;){
-    time(&t);
-    ptm = gmtime(&t);
-    if((ptm->tm_min % minute) == 0 && ptm->tm_sec == 0) break;
-    usleep(1000);
-  }
-  usleep(1000000); // wait another second
-}
-*/
 
 void print_usage() {
   std::cout << "Usage:" << std::endl;
@@ -850,32 +688,6 @@ void update_ppm(
   }
 }
 
-/* Return 1 if the difference is negative, otherwise 0.  */
-// From StackOverflow:
-// http://stackoverflow.com/questions/1468596/c-programming-calculate-elapsed-time-in-milliseconds-unix
-/*
-int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
-    long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
-    result->tv_sec = diff / 1000000;
-    result->tv_usec = diff % 1000000;
-
-    return (diff<0);
-}
-*/
-
-/*
-void timeval_print(struct timeval *tv) {
-    char buffer[30];
-    time_t curtime;
-
-    //printf("%ld.%06ld", tv->tv_sec, tv->tv_usec);
-    curtime = tv->tv_sec;
-    //strftime(buffer, 30, "%m-%d-%Y %T", localtime(&curtime));
-    strftime(buffer, 30, "UTC %m-%d-%Y %T", gmtime(&curtime));
-    printf("%s.%03ld", buffer, (tv->tv_usec+500)/1000);
-}
-*/
-
 // This thread manages the tone being produced. If the desired frequency
 // changes, or if the PPM value is updated, this thread will take appropriate
 // measures to ensure that the tone being produced is as close as possible
@@ -886,7 +698,8 @@ void tone_main(
   const double & ppm_init,
   std::atomic <double> & freq,
   struct PageInfo instrs[],
-  struct PageInfo & constPage
+  struct PageInfo & constPage,
+  std::atomic <bool> & tone_thread_ready
 ) {
   // Initialize
   double ppm=ppm_init;
@@ -916,6 +729,7 @@ void tone_main(
     // Transmit for a small amount of time before checking for updates to
     // frequency or PPM.
     double tx_time_secs=1.0;
+    tone_thread_ready=true;
     txSym(
       terminate,
       freq_new,
@@ -937,6 +751,41 @@ class time_value {
     std::chrono::duration <double> time;
     unsigned int value;
 };
+
+void rectangle(
+  const double & width_secs,
+  std::vector <time_value> & rise,
+  std::vector <time_value> & fall
+) {
+  rise.resize(0);
+  rise.reserve(3);
+  fall.resize(0);
+  fall.reserve(3);
+  {
+    time_value rec;
+    rec.value=0;
+    rec.time=std::chrono::duration <double> (0);
+    rise.push_back(rec);
+    rec.value=8;
+    fall.push_back(rec);
+  }
+  {
+    time_value rec;
+    rec.value=8;
+    rec.time=std::chrono::duration <double> (width_secs/2);
+    rise.push_back(rec);
+    rec.value=0;
+    fall.push_back(rec);
+  }
+  {
+    time_value rec;
+    rec.value=8;
+    rec.time=std::chrono::duration <double> (width_secs);
+    rise.push_back(rec);
+    rec.value=0;
+    fall.push_back(rec);
+  }
+}
 
 // Raised cosine pulse shapes.
 // Rise:
@@ -1070,11 +919,19 @@ void send_dit_dah(
   static std::vector <time_value> rise;
   static std::vector <time_value> fall;
   if ((!initialized)||(ramp_time_prev!=ramp_time)) {
+#if 1
     raised_cosine(
       ramp_time.count(),
       rise,
       fall
     );
+#else
+    rectangle(
+      ramp_time.count(),
+      rise,
+      fall
+    );
+#endif
     initialized=true;
   }
 
@@ -1149,13 +1006,14 @@ void am_main(
       queue.pop_front();
       busy=true;
     }
-    std::cout << tx_char;
 
     // Sample (and hold) wpm.
     const double dot_duration_sec=1.2/wpm;
 
     // Handle whitespace.
     if ((tx_char==' ')||(tx_char=='\n')) {
+      std::cout << tx_char;
+      std::cout.flush();
       if (prev_char_whitespace) {
         // Ignore multiple whitespaces.
         continue;
@@ -1185,10 +1043,16 @@ void am_main(
     } else {
       tx_pattern=morse_table[tx_char];
     }
+    bool printed=false;
     for (unsigned int t=0;t<tx_pattern.length();t++) {
       std::this_thread::sleep_until(earliest_tx_time);
       if (terminate) {
         return;
+      }
+      if ((!ditdit)&&(!printed)) {
+        printed=true;
+        std::cout << tx_char;
+        std::cout.flush();
       }
       const char sym=tx_pattern[t];
       send_dit_dah(terminate,sym,dot_duration_sec,gen);
@@ -1322,14 +1186,21 @@ int main(const int argc, char * const argv[]) {
   // Start tone thread.
   std::atomic <bool> terminate_tone_thread;
   terminate_tone_thread=false;
+  std::atomic <bool> tone_thread_ready;
+  tone_thread_ready=false;
   std::thread tone_thread(tone_main,
     std::ref(terminate_tone_thread),
     std::ref(self_cal),
     std::ref(ppm_init),
     std::ref(tone_freq),
     instrs,
-    std::ref(constPage)
+    std::ref(constPage),
+    std::ref(tone_thread_ready)
   );
+  while (!tone_thread_ready) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
   // Start AM thread
   std::atomic <bool> terminate_am_thread;
@@ -1393,156 +1264,6 @@ int main(const int argc, char * const argv[]) {
   if (tone_thread.joinable()) {
     tone_thread.join();
   }
-
-  /*
-  if (mode==TONE) {
-    // Test tone mode...
-    double wspr_symtime = WSPR_SYMTIME;
-    double tone_spacing=1.0/wspr_symtime;
-
-    stringstream temp;
-    temp << setprecision(6) << fixed << "Transmitting test tone on frequency " << test_tone/1.0e6 << " MHz" << endl;
-    cout << temp.str();
-    cout << "Press CTRL-C to exit!" << endl;
-
-    txon();
-    int bufPtr=0;
-    vector <double> dma_table_freq;
-    // Set to non-zero value to ensure setupDMATab is called at least once.
-    double ppm_prev=123456;
-    double center_freq_actual;
-    while (true) {
-      if (self_cal) {
-        update_ppm(ppm);
-      }
-      if (ppm!=ppm_prev) {
-        setupDMATab(test_tone+1.5*tone_spacing,tone_spacing,F_PLLD_CLK*(1-ppm/1e6),dma_table_freq,center_freq_actual,constPage);
-        //cout << setprecision(30) << dma_table_freq[0] << endl;
-        //cout << setprecision(30) << dma_table_freq[1] << endl;
-        //cout << setprecision(30) << dma_table_freq[2] << endl;
-        //cout << setprecision(30) << dma_table_freq[3] << endl;
-        if (center_freq_actual!=test_tone+1.5*tone_spacing) {
-          cout << "  Warning: because of hardware limitations, test tone will be transmitted on" << endl;
-          stringstream temp;
-          temp << setprecision(6) << fixed << "  frequency: " << (center_freq_actual-1.5*tone_spacing)/1e6 << " MHz" << endl;
-          cout << temp.str();
-        }
-        ppm_prev=ppm;
-      }
-      txSym(0, center_freq_actual, tone_spacing, 60, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
-    }
-
-    // Should never get here...
-
-  } else {
-    // WSPR mode
-
-    // Create WSPR symbols
-    unsigned char symbols[162];
-    wspr(callsign.c_str(), locator.c_str(), tx_power.c_str(), symbols);
-
-    printf("Ready to transmit (setup comlete)...\n");
-    int band=0;
-    int n_tx=0;
-    for(;;) {
-      // Calculate WSPR parameters for this transmission
-      double center_freq_desired;
-      center_freq_desired = center_freq_set[band];
-      bool wspr15 =
-           (center_freq_desired > 137600 && center_freq_desired < 137625) || \
-           (center_freq_desired > 475800 && center_freq_desired < 475825) || \
-           (center_freq_desired > 1838200 && center_freq_desired < 1838225);
-      double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
-      double tone_spacing=1.0/wspr_symtime;
-
-      // Add random offset
-      if ((center_freq_desired!=0)&&random_offset) {
-        center_freq_desired+=(2.0*rand()/((double)RAND_MAX+1.0)-1.0)*(wspr15?WSPR15_RAND_OFFSET:WSPR_RAND_OFFSET);
-      }
-
-      // Status message before transmission
-      stringstream temp;
-      temp << setprecision(6) << fixed;
-      temp << "Desired center frequency for " << (wspr15?"WSPR-15":"WSPR") << " transmission: "<< center_freq_desired/1e6 << " MHz" << endl;
-      cout << temp.str();
-
-      // Wait for WSPR transmission window to arrive.
-      if (no_delay) {
-        cout << "  Transmitting immediately (not waiting for WSPR window)" << endl;
-      } else {
-        printf("  Waiting for next WSPR transmission window...\n");
-        wait_every((wspr15) ? 15 : 2);
-      }
-
-      // Update crystal calibration information
-      if (self_cal) {
-        update_ppm(ppm);
-      }
-
-      // Create the DMA table for this center frequency
-      vector <double> dma_table_freq;
-      double center_freq_actual;
-      if (center_freq_desired) {
-        setupDMATab(center_freq_desired,tone_spacing,F_PLLD_CLK*(1-ppm/1e6),dma_table_freq,center_freq_actual,constPage);
-      } else {
-        center_freq_actual=center_freq_desired;
-      }
-
-      // Send the message!
-      //cout << "TX started!" << endl;
-      if (center_freq_actual){
-        // Print a status message right before transmission begins.
-        struct timeval tvBegin, tvEnd, tvDiff;
-        gettimeofday(&tvBegin, NULL);
-        cout << "  TX started at: ";
-        timeval_print(&tvBegin);
-        cout << endl;
-
-        struct timeval sym_start;
-        struct timeval diff;
-        int bufPtr=0;
-        txon();
-        for (int i = 0; i < 162; i++) {
-          gettimeofday(&sym_start,NULL);
-          timeval_subtract(&diff, &sym_start, &tvBegin);
-          double elapsed=diff.tv_sec+diff.tv_usec/1e6;
-          //elapsed=(i)*wspr_symtime;
-          double sched_end=(i+1)*wspr_symtime;
-          //cout << "symbol " << i << " " << wspr_symtime << endl;
-          //cout << sched_end-elapsed << endl;
-          double this_sym=sched_end-elapsed;
-          this_sym=(this_sym<.2)?.2:this_sym;
-          this_sym=(this_sym>2*wspr_symtime)?2*wspr_symtime:this_sym;
-          txSym(symbols[i], center_freq_actual, tone_spacing, sched_end-elapsed, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
-        }
-        n_tx++;
-
-        // Turn transmitter off
-        txoff();
-
-        gettimeofday(&tvEnd, NULL);
-        cout << "  TX ended at:   ";
-        timeval_print(&tvEnd);
-        timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
-        printf(" (%ld.%03ld s)\n", tvDiff.tv_sec, (tvDiff.tv_usec+500)/1000);
-
-      } else {
-        cout << "  Skipping transmission" << endl;
-        usleep(1000000);
-      }
-
-      // Advance to next band
-      band=(band+1)%nbands;
-      if ((band==0)&&!repeat) {
-        break;
-      }
-      if ((terminate>0)&&(n_tx>=terminate)) {
-        break;
-      }
-
-    }
-  }
-  */
 
   return 0;
 }
