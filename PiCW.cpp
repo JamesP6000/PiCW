@@ -687,6 +687,8 @@ void print_usage() {
   std::cout << "    Known PPM correction to 19.2MHz RPi nominal crystal frequency." << std::endl;
   std::cout << "  -s --self-calibration" << std::endl;
   std::cout << "    Call ntp_adjtime() periodically to obtain the PPM error of the crystal." << std::endl;
+  std::cout << "  -d --ditdit" << std::endl;
+  std::cout << "    Transmit an endless series of dits. Can be used to measure TX spectrum" << std::endl;
 }
 
 void parse_commandline(
@@ -698,7 +700,8 @@ void parse_commandline(
   double & wpm,
   double & ppm,
   bool & self_cal,
-  std::string & str
+  std::string & str,
+  bool & ditdit
 ) {
   // Default values
   tone_freq=NAN;
@@ -706,6 +709,7 @@ void parse_commandline(
   ppm=0;
   self_cal=false;
   str="";
+  ditdit=false;
 
   static struct option long_options[] = {
     {"help",             no_argument,       0, 'h'},
@@ -713,6 +717,7 @@ void parse_commandline(
     {"wpm",              required_argument, 0, 'w'},
     {"ppm",              required_argument, 0, 'p'},
     {"self-calibration", no_argument,       0, 's'},
+    {"ditdit",           no_argument,       0, 'd'},
     {0, 0, 0, 0}
   };
 
@@ -760,6 +765,9 @@ void parse_commandline(
       case 's':
         self_cal=true;
         break;
+      case 'd':
+        ditdit=true;
+        break;
       case '?':
         /* getopt_long already printed an error message. */
         ABORT(-1);
@@ -786,6 +794,13 @@ void parse_commandline(
     std::cerr << "Error: must specify TX frequency (try --help)" << std::endl;
     ABORT(-1);
   }
+  if ((!str.empty())&&ditdit) {
+  MARK;
+  std::cout << str << std::endl;
+  MARK;
+    std::cerr << "Error: cannot transmit text when ditdit mode is requested" << std::endl;
+    ABORT(-1);
+  }
 
   // Print a summary of the parsed options
   std::cout << "PiCW parsed command line options:" << std::endl;
@@ -800,8 +815,12 @@ void parse_commandline(
   } else if (ppm) {
     temp << "  PPM value to be used for all transmissions: " << ppm << std::endl;
   }
-  std::cout << "Message to be sent:" << std::endl;
-  std::cout << '"' << str << '"' << std::endl;
+  if (ditdit) {
+    std::cout << "Will transmit an endless series of dits. CTRL-C to exit." << std::endl;
+  } else {
+    std::cout << "Message to be sent:" << std::endl;
+    std::cout << '"' << str << '"' << std::endl;
+  }
 }
 
 // Call ntp_adjtime() to obtain the latest calibration coefficient.
@@ -869,8 +888,6 @@ void tone_main(
   struct PageInfo instrs[],
   struct PageInfo & constPage
 ) {
-  std::cout << "tone thread started" << std::endl;
-
   // Initialize
   double ppm=ppm_init;
   if (self_cal) {
@@ -1103,10 +1120,9 @@ void am_main(
   std::condition_variable & queue_signal,
   std::map <char,std::string> & morse_table,
   std::atomic <double> & wpm,
-  std::atomic <bool> & busy
+  std::atomic <bool> & busy,
+  const bool & ditdit
 ) {
-  std::cout << "am thread started" << std::endl;
-
   bool prev_char_whitespace=true;
   std::chrono::time_point <std::chrono::high_resolution_clock,std::chrono::duration <double>> earliest_tx_time=std::chrono::high_resolution_clock::now();
 
@@ -1118,7 +1134,7 @@ void am_main(
 
     // Get the next character from the queue.
     char tx_char='\0';
-    {
+    if (!ditdit) {
       std::unique_lock <std::mutex> lock(queue_mutex);
       if (terminate) {
         return;
@@ -1133,7 +1149,7 @@ void am_main(
       queue.pop_front();
       busy=true;
     }
-    std::cout << "TX char: " << tx_char << std::endl;
+    std::cout << tx_char;
 
     // Sample (and hold) wpm.
     const double dot_duration_sec=1.2/wpm;
@@ -1151,7 +1167,7 @@ void am_main(
     }
     prev_char_whitespace=false;
 
-    if (morse_table.find(tx_char)==morse_table.end()) {
+    if ((!ditdit)&&(morse_table.find(tx_char)==morse_table.end())) {
       // We should never get here... Only characters in morse code table
       // should ever get forwarded here.
       ABORT(-1);
@@ -1163,7 +1179,12 @@ void am_main(
     }
 
     // Send the dits and dahs
-    std::string tx_pattern=morse_table[tx_char];
+    std::string tx_pattern;
+    if (ditdit) {
+      tx_pattern=".....";
+    } else {
+      tx_pattern=morse_table[tx_char];
+    }
     for (unsigned int t=0;t<tx_pattern.length();t++) {
       std::this_thread::sleep_until(earliest_tx_time);
       if (terminate) {
@@ -1175,6 +1196,9 @@ void am_main(
         earliest_tx_time+=std::chrono::duration <double> (2*dot_duration_sec);
       } else {
         earliest_tx_time+=std::chrono::duration <double> (4*dot_duration_sec);
+      }
+      if (ditdit) {
+        t=0;
       }
     }
     earliest_tx_time+=std::chrono::duration <double> (3*dot_duration_sec);
@@ -1247,6 +1271,7 @@ int main(const int argc, char * const argv[]) {
   double wpm_init;
   double ppm_init;
   bool self_cal;
+  bool ditdit;
   std::string str;
   parse_commandline(
     argc,
@@ -1255,7 +1280,8 @@ int main(const int argc, char * const argv[]) {
     wpm_init,
     ppm_init,
     self_cal,
-    str
+    str,
+    ditdit
   );
 
   // Initial configuration
@@ -1320,7 +1346,8 @@ int main(const int argc, char * const argv[]) {
     std::ref(queue_signal),
     std::ref(morse_table),
     std::ref(wpm),
-    std::ref(am_thread_busy)
+    std::ref(am_thread_busy),
+    ditdit
   );
 
   // Push text into AM thread
@@ -1333,9 +1360,12 @@ int main(const int argc, char * const argv[]) {
       }
     }
     queue_signal.notify_one();
-    std::cout << queue.size() << std::endl;
   }
-  std::cout << queue.size() << std::endl;
+
+  // In ditdit mode, can only exit using ctrl-c.
+  while (ditdit) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  }
 
   // Wait for queue to be emptied.
   while (true) {
@@ -1352,6 +1382,7 @@ int main(const int argc, char * const argv[]) {
   while (am_thread_busy) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
+  std::cout << std::endl;
 
   // Terminate subthreads
   terminate_am_thread=true;
