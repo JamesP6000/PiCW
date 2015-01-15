@@ -1166,12 +1166,54 @@ int main(const int argc, char * const argv[]) {
     std::cerr << "Error: mmap error!" << std::endl;
     ABORT(-1);
   }
-  txon();
+
+  //txon();
+  SETBIT(GPFSEL0 , 14);
+  CLRBIT(GPFSEL0 , 13);
+  CLRBIT(GPFSEL0 , 12);
+  // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
+  /*
+  ACCESS(PADS_GPIO_0_27) = 0x5a000018 + 0;  //2mA -3.4dBm
+  ACCESS(CM_GP0CTL) =
+    // PW
+    (0x5a<<24) |
+    // MASH
+    (3<<9) |
+    // Flip
+    (0<<8) |
+    // Busy
+    (0<<7) |
+    // Kill
+    (0<<5) |
+    // Enable
+    (0<<4) |
+    // SRC
+    (6<<0)
+  ;
+  */
   struct PageInfo constPage;
   struct PageInfo instrPage;
   struct PageInfo instrs[1024];
   setupDMA(constPage,instrPage,instrs);
-  txoff();
+  //txoff();
+  /*
+  ACCESS(CM_GP0CTL) =
+    // PW
+    (0x5a<<24) |
+    // MASH
+    (1<<9) |
+    // Flip
+    (0<<8) |
+    // Busy
+    (0<<7) |
+    // Kill
+    (0<<5) |
+    // Enable
+    (0<<4) |
+    // SRC
+    (6<<0)
+  ;
+  */
 
   // Morse code table.
   std::map <char,std::string> morse_table;
@@ -1200,7 +1242,7 @@ int main(const int argc, char * const argv[]) {
   while (!tone_thread_ready) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
   // Start AM thread
   std::atomic <bool> terminate_am_thread;
