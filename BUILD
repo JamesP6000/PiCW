@@ -13,6 +13,7 @@ Get code/ compile:
   git clone https://github.com/JamesP6000/PiCW.git
   cd PiCW
   make
+Note that compiling takes about 60 seconds on the Pi.
 
 Install to /usr/local/bin:
   sudo make install
