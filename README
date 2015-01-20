@@ -32,6 +32,9 @@ Example usage:
   worst case frequency domain performance of the transmitter.
     sudo PiCW --freq 10.140e6 --ditdit --wpm 60
 
+  Transmit an continuous tone at 10.140 MHz
+    sudo PiCW --freq 10.140e6 --test-tone
+
 ******
 "PiCW --help" output:
 ******
@@ -89,6 +92,17 @@ Radio licensing / RF:
   operating into nearby antennas. Therefore it is RECOMMENDED to add some form
   of isolation, e.g. by using a RF transformer, a simple buffer/driver/PA
   stage, two schottky small signal diodes back to back.
+
+  In transmitting Morse code, the CW carrier must be turned on and off.
+  To avoid abruptly turning the carrier on and off, the drive strength
+  of the GPIO pin used for transmission is gradually increased from 0 to
+  16ma with the idea being that this will reduce the frequency spurs created.
+  Specifically, the current is increased up to maximum current by following
+  a raised cosine curve.
+
+  Furthermore, a random amount of time domain jitter is added to the turn on
+  and turn off ramps to again reduce the spurs created by the turn on/ off
+  transients.
 
 ******
 Calibration:
