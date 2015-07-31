@@ -20,21 +20,21 @@ Installation / update:
 Example usage:
 ******
   Brief help screen
-    PiCW --help
+    ./PiCW --help
 
   Send the Morse code message "TEST DE N9NNN" on carrier frequency 10.140 MHz
   using the default rate of 20 WPM:
-    sudo PiCW --freq 10.140e6 TEST DE N9NNN
+    sudo ./PiCW --freq 10.140e6 TEST DE N9NNN
 
   As above, but this time use NTP to calibrate the TX frequency:
-    sudo PiCW --freq 10.140e6 --self-calibration TEST DE N9NNN
+    sudo ./PiCW --freq 10.140e6 --self-calibration TEST DE N9NNN
 
   Transmit an endless series of dits at 60 WPM. Can be used to measure the
   worst case frequency domain performance of the transmitter.
-    sudo PiCW --freq 10.140e6 --ditdit --wpm 60
+    sudo ./PiCW --freq 10.140e6 --ditdit --wpm 60
 
   Transmit a continuous tone at 10.140 MHz
-    sudo PiCW --freq 10.140e6 --test-tone
+    sudo ./PiCW --freq 10.140e6 --test-tone
 
 ******
 "PiCW --help" output:
