@@ -1065,20 +1065,20 @@ void morse_table_init(
   morse_table['7']="--...";
   morse_table['8']="---..";
   morse_table['9']="----.";
-  morse_table['.']=".−.−.−";
-  morse_table[',']="−−..−−";
-  morse_table[':']="−−−...";
-  morse_table['?']="..−−..";
-  morse_table['\'']=".−−−−.";
-  morse_table['-']="−....−";
-  morse_table['/']="−..−.";
-  morse_table['(']="−.−−.";
-  morse_table[')']="−.−−.−";
-  morse_table['"']=".−..−.";
-  morse_table['=']="−...−";
-  morse_table['+']=".−.−.";
-  morse_table['*']="−..−";
-  morse_table['@']=".––.–.";
+  morse_table['.']=".-.-.-";
+  morse_table[',']="--..--";
+  morse_table[':']="---...";
+  morse_table['?']="..--..";
+  morse_table['\'']=".----.";
+  morse_table['-']="-....-";
+  morse_table['/']="-..-.";
+  morse_table['(']="-.--.";
+  morse_table[')']="-.--.-";
+  morse_table['"']=".-..-.";
+  morse_table['=']="-...-";
+  morse_table['+']=".-.-.";
+  morse_table['*']="-..-";
+  morse_table['@']=".--.-.";
 }
 
 int main(const int argc, char * const argv[]) {
