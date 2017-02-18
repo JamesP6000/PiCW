@@ -100,13 +100,6 @@ volatile unsigned *allof7e = NULL;
 #define SETBIT(base, bit) ACCESS(base) |= 1<<bit
 #define CLRBIT(base, bit) ACCESS(base) &= ~(1<<bit)
 
-//#define CM_GP0CTL (0x7e101070)
-//#define GPFSEL0 (0x7E200000)
-//#define PADS_GPIO_0_27  (0x7e10002c)
-//#define CM_GP0DIV (0x7e101074)
-//#define CLKBASE (0x7E101000)
-//#define DMABASE (0x7E007000)
-//#define PWMBASE  (0x7e20C000) /* PWM controller */
 #define GPIO_PHYS_BASE (0x7E200000)
 #define CM_GP0CTL (0x7e101070)
 #define CM_GP0DIV (0x7e101074)
