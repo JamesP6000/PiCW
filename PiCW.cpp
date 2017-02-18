@@ -52,7 +52,7 @@
 
 #include "mailbox.h"
 
-using namespace std;
+//using namespace std;
 
 #define ABORT(a) exit(a)
 // Used for debugging
@@ -62,7 +62,12 @@ using namespace std;
 // There seems to be a 2.5ppm offset between the NTP measured frequency
 // error and the frequency error measured by a frequency counter. This fixed
 // PPM offset is compensated for here.
+// This PPM correction is not needed for RPI2/3.
+#ifdef RPI2
+#define F_PLLD_CLK   (500000000.0*(1-0.000e-6))
+#else
 #define F_PLLD_CLK   (500000000.0*(1-2.500e-6))
+#endif
 // Empirical value for F_PWM_CLK that produces WSPR symbols that are 'close' to
 // 0.682s long. For some reason, despite the use of DMA, the load on the PI
 // affects the TX length of the symbols. However, the varying symbol length is
@@ -160,7 +165,7 @@ void allocMemPool(unsigned numpages)
 void getRealMemPageFromPool(void ** vAddr, void **pAddr)
 {
     if (mbox.pool_cnt>=mbox.pool_size) {
-      cerr << "Error: unable to allocated more pages!" << endl;
+      std::cerr << "Error: unable to allocated more pages!" << std::endl;
       ABORT(-1);
     }
     unsigned offset = mbox.pool_cnt*4096;
@@ -1104,7 +1109,28 @@ void morse_table_init(
   morse_table['@']=".--.-.";
 }
 
+void open_mbox() {
+  unlink(DEVICE_FILE_NAME);
+  unlink(LOCAL_DEVICE_FILE_NAME);
+  if (mknod(DEVICE_FILE_NAME, S_IFCHR|0600, makedev(100, 0)) < 0) {
+    std::cerr << "Failed to create mailbox device." << std::endl;
+    ABORT(-1);
+  }
+  mbox.handle = mbox_open();
+  if (mbox.handle < 0) {
+    std::cerr << "Failed to open mailbox." << std::endl;
+    ABORT(-1);
+  }
+}
+
+void unlinkmbox() {
+  unlink(DEVICE_FILE_NAME);
+  unlink(LOCAL_DEVICE_FILE_NAME);
+};
+
 int main(const int argc, char * const argv[]) {
+  atexit(unlinkmbox);
+
   // Parse arguments
   double freq_init;
   double wpm_init;
@@ -1143,6 +1169,7 @@ int main(const int argc, char * const argv[]) {
     std::cerr << "Error: mmap error!" << std::endl;
     ABORT(-1);
   }
+  open_mbox();
 
   // Configure GPIO4
   SETBIT(GPIO_PHYS_BASE , 14);
