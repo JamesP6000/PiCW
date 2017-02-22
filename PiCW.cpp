@@ -78,11 +78,11 @@
 #ifdef RPI2
 #define BCM2708_PERI_BASE 0x3f000000
 #define MEM_FLAG 0x04
-#pragma message "Raspberry Pi 2/3 detected."
+//#pragma message "Raspberry Pi 2/3 detected."
 #else
 #define BCM2708_PERI_BASE 0x20000000
 #define MEM_FLAG 0x0c
-#pragma message "Raspberry Pi 1 detected."
+//#pragma message "Raspberry Pi 1 detected."
 #endif
 
 #define PAGE_SIZE (4*1024)
@@ -333,10 +333,13 @@ void setupDMA(
   struct PageInfo instrs[]
 ){
    atexit(unSetupDMA);
+   atexit(deallocMemPool);
    signal (SIGINT, handSig);
    signal (SIGTERM, handSig);
    signal (SIGHUP, handSig);
    signal (SIGQUIT, handSig);
+
+   allocMemPool(1025);
 
    // Allocate a page of ram for the constants
    getRealMemPageFromPool(&constPage.v, &constPage.p);
@@ -537,7 +540,7 @@ void parse_commandline(
   while (1) {
     /* getopt_long stores the option index here. */
     int option_index = 0;
-    int c = getopt_long (argc, argv, "hf:w:p:s",
+    int c = getopt_long (argc, argv, "hf:w:p:sdt",
                      long_options, &option_index);
     if (c == -1)
       break;
@@ -641,7 +644,7 @@ void parse_commandline(
   if (ditdit) {
     std::cout << "Will transmit an endless series of dits. CTRL-C to exit." << std::endl;
   } else if (test_tone) {
-    std::cout << "Will transmit continuous tone on frequency. CTRL-C to exit." << std::endl;
+    std::cout << "Will transmit continuous tone on requested frequency. CTRL-C to exit." << std::endl;
   } else {
     std::cout << "Message to be sent:" << std::endl;
     std::cout << '"' << str << '"' << std::endl;
@@ -1129,6 +1132,12 @@ void unlinkmbox() {
 };
 
 int main(const int argc, char * const argv[]) {
+#ifdef RPI1
+  std::cout << "Detected Raspberry Pi version 1" << std::endl;
+#else
+  std::cout << "Detected Raspberry Pi version 2/3" << std::endl;
+#endif
+
   atexit(unlinkmbox);
 
   // Parse arguments
