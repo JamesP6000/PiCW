@@ -52,8 +52,6 @@
 
 #include "mailbox.h"
 
-//using namespace std;
-
 #define ABORT(a) exit(a)
 // Used for debugging
 #define MARK std::cout << "Currently in file: " << __FILE__ << " line: " << __LINE__ << std::endl
@@ -104,6 +102,9 @@ volatile unsigned *allof7e = NULL;
 #define ACCESS(base) *(volatile int*)((long int)allof7e+base-0x7e000000)
 #define SETBIT(base, bit) ACCESS(base) |= 1<<bit
 #define CLRBIT(base, bit) ACCESS(base) &= ~(1<<bit)
+
+#define GPIO_VIRT_BASE (BCM2708_PERI_BASE + 0x200000) /* GPIO controller */
+#define DMA_VIRT_BASE  (BCM2708_PERI_BASE + 0x7000)
 
 #define GPIO_PHYS_BASE (0x7E200000)
 #define CM_GP0CTL (0x7e101070)
@@ -233,28 +234,39 @@ void txSym(
     // Configure the transmission for this iteration
     // Set GPIO pin to transmit f0
     bufPtr++;
+    MARK;
     while( ACCESS(DMA_PHYS_BASE + 0x04 /* CurBlock*/) ==  (long int)(instrs[bufPtr].p)) usleep(100);
     ((struct CB*)(instrs[bufPtr].v))->SOURCE_AD = (long int)constPage.p + f0_idx*4;
 
     // Wait for n_f0 PWM clocks
     bufPtr++;
+    MARK;
     while( ACCESS(DMA_PHYS_BASE + 0x04 /* CurBlock*/) ==  (long int)(instrs[bufPtr].p)) usleep(100);
     ((struct CB*)(instrs[bufPtr].v))->TXFR_LEN = n_f0;
 
     // Set GPIO pin to transmit f1
     bufPtr++;
+    MARK;
     while( ACCESS(DMA_PHYS_BASE + 0x04 /* CurBlock*/) ==  (long int)(instrs[bufPtr].p)) usleep(100);
     ((struct CB*)(instrs[bufPtr].v))->SOURCE_AD = (long int)constPage.p + f1_idx*4;
 
     // Wait for n_f1 PWM clocks
     bufPtr=(bufPtr+1) % (1024);
-    while( ACCESS(DMA_PHYS_BASE + 0x04 /* CurBlock*/) ==  (long int)(instrs[bufPtr].p)) usleep(100);
+    MARK;
+    while( ACCESS(DMA_PHYS_BASE + 0x04 /* CurBlock*/) ==  (long int)(instrs[bufPtr].p)) {
+      std::cout << ACCESS(DMA_PHYS_BASE + 0x04 /* CurBlock*/) << std::endl;
+      usleep(100);
+    }
+    MARK;
     ((struct CB*)(instrs[bufPtr].v))->TXFR_LEN = n_f1;
+    MARK;
 
     // Update counters
     n_pwmclk_transmitted+=n_pwmclk;
     n_f0_transmitted+=n_f0;
+    MARK;
   }
+    MARK;
 }
 
 void unSetupDMA(){
@@ -311,7 +323,7 @@ void setupDMATab(
   div-=pow(2.0,-12);
   tuning_word[1]=((int)(div*pow(2.0,12)));
   // Fill the remaining table, just in case...
-  for (int i=8;i<1024;i++) {
+  for (int i=2;i<1024;i++) {
     double div=500+i;
     tuning_word[i]=((int)(div*pow(2.0,12)));
   }
@@ -425,16 +437,16 @@ void setup_io(
 ) {
     /* open /dev/mem */
     if ((mem_fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
-        printf("can't open /dev/mem \n");
-        exit (-1);
+        std::cerr << "Error: can't open /dev/mem" << std::endl;
+        ABORT (-1);
     }
 
     /* mmap GPIO */
 
     // Allocate MAP block
     if ((gpio_mem = (char *)malloc(BLOCK_SIZE + (PAGE_SIZE-1))) == NULL) {
-        printf("allocation error \n");
-        exit (-1);
+        std::cerr << "Error: allocation error" << std::endl;
+        ABORT (-1);
     }
 
     // Make sure pointer is on 4K boundary
@@ -448,20 +460,20 @@ void setup_io(
                    PROT_READ|PROT_WRITE,
                    MAP_SHARED|MAP_FIXED,
                    mem_fd,
-                   GPIO_PHYS_BASE
+                   GPIO_VIRT_BASE
                );
 
     if ((long)gpio_map < 0) {
-        printf("mmap error %ld\n", (long int)gpio_map);
-        exit (-1);
+        std::cerr << "Error: mmap error" << (long int)gpio_map << std::endl;
+        ABORT (-1);
     }
 
     // Always use volatile pointer!
     gpio = (volatile unsigned *)gpio_map;
-
-
 }
 
+// Not sure why this function is needed as this code only uses GPIO4 and
+// this function sets gpio 7 through 11 as input...
 void setup_gpios(
   volatile unsigned * & gpio
 ){
@@ -703,10 +715,12 @@ void tone_main(
   int bufPtr=0;
 
   while (!terminate) {
+  MARK;
     // Read the current values of the atomics.
     double freq_new=freq;
     double ppm_new=ppm;
 
+  MARK;
     // Update table if necessary.
     if (
       (ppm_new!=ppm_old) ||
@@ -715,11 +729,13 @@ void tone_main(
     ) {
       setupDMATab(freq_new,F_PLLD_CLK*(1-ppm_new/1e6),dma_table_freq,constPage);
     }
+  MARK;
 
     // Transmit for a small amount of time before checking for updates to
     // frequency or PPM.
     double tx_time_secs=1.0;
     tone_thread_ready=true;
+  MARK;
     txSym(
       terminate,
       freq_new,
@@ -730,6 +746,7 @@ void tone_main(
       constPage,
       bufPtr
     );
+  MARK;
 
     freq_old=freq_new;
     ppm_old=ppm_new;
@@ -1168,11 +1185,11 @@ int main(const int argc, char * const argv[]) {
   setup_gpios(gpio);
   allof7e = (unsigned *)mmap(
               NULL,
-              0x01000000,  //len
+              0x002FFFFF,  //len
               PROT_READ|PROT_WRITE,
               MAP_SHARED,
               mem_fd,
-              0x20000000  //base
+              BCM2708_PERI_BASE  //base
           );
   if ((long int)allof7e==-1) {
     std::cerr << "Error: mmap error!" << std::endl;
@@ -1254,6 +1271,7 @@ int main(const int argc, char * const argv[]) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
   }
 
+  MARK;
   // Wait for queue to be emptied.
   while (true) {
     {
@@ -1264,6 +1282,7 @@ int main(const int argc, char * const argv[]) {
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
+  MARK;
 
   // Wait for final character to be transmitted.
   while (am_thread_busy) {
@@ -1271,15 +1290,19 @@ int main(const int argc, char * const argv[]) {
   }
   std::cout << std::endl;
 
+  MARK;
   // Terminate subthreads
   terminate_am_thread=true;
   terminate_tone_thread=true;
+  MARK;
   if (am_thread.joinable()) {
     am_thread.join();
   }
+  MARK;
   if (tone_thread.joinable()) {
     tone_thread.join();
   }
+  MARK;
 
   return 0;
 }
