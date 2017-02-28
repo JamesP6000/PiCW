@@ -4,17 +4,23 @@ Makes a very simple Morse Code transmitter from your RasberryPi by connecting
 GPIO port 4 to Antenna (and LPF). Operates on LF, MF, HF and VHF bands from 0
 to 250 MHz.
 
+Compatible with the original Raspberry Pi and the Raspberry Pi 2/3.
+
 ******
 Installation / update:
 ******
   Simple instructions (see BUILD file for more information):
-    sudo apt-get install git g++-4.7 make grep mawk ntp
+    sudo apt-get install git
     git clone https://github.com/JamesP6000/PiCW.git
     cd PiCW
     make
-  Note that compiling takes about 60 seconds on the Pi!
+  Note that compiling takes about 60 seconds on the RPi v1!
 
-  See the accompanying BUILD file for more details.
+  Install to /usr/local/bin:
+    sudo make install
+
+  Uninstall:
+    sudo make uninstall
 
 ******
 Example usage:
@@ -25,9 +31,6 @@ Example usage:
   Send the Morse code message "TEST DE N9NNN" on carrier frequency 10.140 MHz
   using the default rate of 20 WPM:
     sudo ./PiCW --freq 10.140e6 TEST DE N9NNN
-
-  As above, but this time use NTP to calibrate the TX frequency:
-    sudo ./PiCW --freq 10.140e6 --self-calibration TEST DE N9NNN
 
   Transmit an endless series of dits at 60 WPM. Can be used to measure the
   worst case frequency domain performance of the transmitter.
@@ -52,7 +55,9 @@ Example usage:
     -p --ppm ppm
       Known PPM correction to 19.2MHz RPi nominal crystal frequency.
     -s --self-calibration
-      Call ntp_adjtime() periodically to obtain the PPM error of the crystal.
+      Call NTP periodically to obtain the PPM error of the crystal (default).
+    -n --no-self-cal
+      Do not use NTP to correct frequency error of RPi crystal.
     -d --ditdit
       Transmit an endless series of dits. Can be used to measure TX spectrum.
     -t --test-tone
@@ -68,10 +73,16 @@ Radio licensing / RF:
   GND pins are found on header P1 pin 7 and 9 respectively, the pin closest to
   P1 label is pin 1 and its 3rd and 4th neighbour is pin 7 and 9 respectively.
   See this link for pin layout: http://elinux.org/RPi_Low-level_peripherals
+
   Examples of low-pass filters can be found here:
-  http://www.qrp-labs.com/LPF
-  http://www.qrp-labs.com/ULPF
-  http://www.gqrp.com/harmonic_filters.pdf
+    http://www.qrp-labs.com/LPF
+    http://www.qrp-labs.com/ULPF
+    http://www.gqrp.com/harmonic_filters.pdf
+  TAPR makes a very nice shield for the Raspberry Pi that is pre-assembled,
+  performs the appropriate filtering for the 20m band, and also increases
+  the power output to 100mW (+20dBm)! Just connect your antenna and you're
+  good-to-go!
+    https://www.tapr.org/kits_20M-wspr-pi.html
 
   The expected power output is 10mW (+10dBm) in a 50 Ohm load. This looks
   neglible, but when connected to a simple dipole antenna this may result in
@@ -112,6 +123,10 @@ Radio licensing / RF:
 ******
 Calibration:
 ******
+  As of 2017-02, NTP calibration is enabled by default and produces a
+  frequency error of about 0.1 PPM after the Pi has temperature stabilized
+  and the NTP loop has converged.
+
   Frequency calibration is HIGHLY recommended to ensure that your
   transmissions lie within the CW band you are targetting.
 
@@ -185,4 +200,7 @@ History/Credits:
 
   James Peroulas <james@peroulas.com> AB0JP created PiCW.
   https://github.com/JamesP6000/PiCW
+
+  Retzler András (HA7ILM) for the massive changes that were required to
+  incorporate the mailbox code so that the RPi2 and RPi3 could be supported.
 
