@@ -363,32 +363,7 @@ void unSetupDMA(){
   struct DMAregs* DMA0 = (struct DMAregs*)&(ACCESS_BUS_ADDR(DMA_BUS_BASE));
   DMA0->CS =1<<31;  // reset dma controller
   disable_clock();
-/*
-  // Turn off GPIO clock
-  ACCESS_BUS_ADDR(CM_GP0CTL_BUS) =
-    // PW
-    (0x5a<<24) |
-    // MASH
-    (1<<9) |
-    // Flip
-    (0<<8) |
-    // Busy
-    (0<<7) |
-    // Kill
-    (0<<5) |
-    // Enable
-    (0<<4) |
-    // SRC
-    (6<<0)
-  ;
-*/
 }
-
-/*
-void handSig(const int h) {
-  exit(0);
-}
-*/
 
 double bit_trunc(
   const double & d,
@@ -438,13 +413,6 @@ void setupDMA(
   struct PageInfo & instrPage,
   struct PageInfo instrs[]
 ){
-  //atexit(unSetupDMA);
-  //atexit(deallocMemPool);
-  //signal (SIGINT, handSig);
-  //signal (SIGTERM, handSig);
-  //signal (SIGHUP, handSig);
-  //signal (SIGQUIT, handSig);
-
   allocMemPool(1025);
 
   // Allocate a page of ram for the constants
@@ -520,79 +488,6 @@ void setupDMA(
   DMA0->CS =(1<<0)|(255 <<16);  // enable bit = 0, clear end flag = 1, prio=19-16
 }
 
-#if 0
-//
-// Set up memory regions to access GPIO
-//
-void setup_io(
-  int & mem_fd
-  //char * & gpio_mem,
-  //char * & gpio_map,
-  //volatile unsigned * & gpio
-) {
-    /* open /dev/mem */
-    if ((mem_fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
-        std::cerr << "Error: can't open /dev/mem" << std::endl;
-        ABORT (-1);
-    }
-
-    /* mmap GPIO */
-
-    // Allocate MAP block
-    if ((gpio_mem = (char *)malloc(BLOCK_SIZE + (PAGE_SIZE-1))) == NULL) {
-        std::cerr << "Error: allocation error" << std::endl;
-        ABORT (-1);
-    }
-
-    // Make sure pointer is on 4K boundary
-    if ((unsigned long)gpio_mem % PAGE_SIZE)
-        gpio_mem += PAGE_SIZE - ((unsigned long)gpio_mem % PAGE_SIZE);
-
-    // Now map it
-    gpio_map = (char *)mmap(
-                   gpio_mem,
-                   BLOCK_SIZE,
-                   PROT_READ|PROT_WRITE,
-                   MAP_SHARED|MAP_FIXED,
-                   mem_fd,
-                   GPIO_VIRT_BASE
-               );
-
-    if ((long)gpio_map < 0) {
-        std::cerr << "Error: mmap error" << (long int)gpio_map << std::endl;
-        ABORT (-1);
-    }
-
-    // Always use volatile pointer!
-    gpio = (volatile unsigned *)gpio_map;
-}
-#endif
-
-#if 0
-// Not sure why this function is needed as this code only uses GPIO4 and
-// this function sets gpio 7 through 11 as input...
-void setup_gpios(
-  volatile unsigned * & gpio
-){
-   int g;
-   // Switch GPIO 7..11 to output mode
-
-    /************************************************************************\
-     * You are about to change the GPIO settings of your computer.          *
-     * Mess this up and it will stop working!                               *
-     * It might be a good idea to 'sync' before running this program        *
-     * so at least you still have your code changes written to the SD-card! *
-    \************************************************************************/
-
-    // Set GPIO pins 7-11 to output
-    for (g=7; g<=11; g++) {
-        //INP_GPIO(g); // must use INP_GPIO before we can use OUT_GPIO
-        //OUT_GPIO(g);
-    }
-
-}
-#endif
-
 void print_usage() {
   std::cout << "Usage:" << std::endl;
   std::cout << "  PiCW [options] \"text to send in Morse code\"" << std::endl;
@@ -607,7 +502,9 @@ void print_usage() {
   std::cout << "  -p --ppm ppm" << std::endl;
   std::cout << "    Known PPM correction to 19.2MHz RPi nominal crystal frequency." << std::endl;
   std::cout << "  -s --self-calibration" << std::endl;
-  std::cout << "    Call ntp_adjtime() periodically to obtain the PPM error of the crystal." << std::endl;
+  std::cout << "    Call NTP periodically to obtain the PPM error of the crystal (default)." << std::endl;
+  std::cout << "  -n --no-self-cal" << std::endl;
+  std::cout << "    Do not use NTP to correct frequency error of RPi crystal." << std::endl;
   std::cout << "  -d --ditdit" << std::endl;
   std::cout << "    Transmit an endless series of dits. Can be used to measure TX spectrum." << std::endl;
   std::cout << "  -t --test-tone" << std::endl;
@@ -631,7 +528,7 @@ void parse_commandline(
   tone_freq=NAN;
   wpm=20;
   ppm=0;
-  self_cal=false;
+  self_cal=true;
   str="";
   ditdit=false;
   test_tone=false;
@@ -642,6 +539,7 @@ void parse_commandline(
     {"wpm",              required_argument, 0, 'w'},
     {"ppm",              required_argument, 0, 'p'},
     {"self-calibration", no_argument,       0, 's'},
+    {"no-self-cal",      no_argument,       0, 'n'},
     {"ditdit",           no_argument,       0, 'd'},
     {"test-tone",        no_argument,       0, 't'},
     {0, 0, 0, 0}
@@ -650,7 +548,7 @@ void parse_commandline(
   while (1) {
     /* getopt_long stores the option index here. */
     int option_index = 0;
-    int c = getopt_long (argc, argv, "hf:w:p:sdt",
+    int c = getopt_long (argc, argv, "hf:w:p:sfdt",
                      long_options, &option_index);
     if (c == -1)
       break;
@@ -690,6 +588,9 @@ void parse_commandline(
         break;
       case 's':
         self_cal=true;
+        break;
+      case 'n':
+        self_cal=false;
         break;
       case 'd':
         ditdit=true;
@@ -747,7 +648,7 @@ void parse_commandline(
     std::cout << "  WPM: " << wpm << std::endl;
   }
   if (self_cal) {
-    temp << "  ntp_adjtime() will be used to periodically calibrate the transmission frequency" << std::endl;
+    temp << "  NTP will be used to periodically calibrate the transmission frequency" << std::endl;
   } else if (ppm) {
     temp << "  PPM value to be used for all transmissions: " << ppm << std::endl;
   }
@@ -1267,33 +1168,6 @@ void setSchedPriority(int priority) {
 
 // Create the memory map between virtual memory and the peripheral range
 // of physical memory.
-#if 0
-void setup_peri_base_virt(
-  volatile unsigned * & peri_base_virt
-) {
-  int mem_fd;
-  // open /dev/mem
-  if ((mem_fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
-    std::cerr << "Error: can't open /dev/mem" << std::endl;
-    ABORT (-1);
-  }
-  std::cout << "peri_base_virt: " << std::hex << (unsigned int)peri_base_virt << std::dec << std::endl;
-  peri_base_virt = (unsigned *)mmap(
-    NULL,
-    0x01000000,  //len
-    PROT_READ|PROT_WRITE,
-    MAP_SHARED,
-    mem_fd,
-    PERI_BASE_PHYS  //base
-  );
-  std::cout << "peri_base_virt: " << std::hex << (unsigned int)peri_base_virt << std::dec << std::endl;
-  if (peri_base_virt==MAP_FAILED) {
-    std::cerr << "Error: peri_base_virt mmap error!" << std::endl;
-    ABORT(-1);
-  }
-  close(mem_fd);
-}
-#endif
 void setup_peri_base_virt(
   volatile unsigned * & peri_base_virt
 ) {
@@ -1319,8 +1193,8 @@ void setup_peri_base_virt(
 }
 
 int main(const int argc, char * const argv[]) {
+  // TODO: Each thread needs to have its own signal handler.
   //catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
-  /*
   for (int i = 0; i < 64; i++) {
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -1329,7 +1203,6 @@ int main(const int argc, char * const argv[]) {
   }
   atexit(cleanup);
   setSchedPriority(30);
-  */
 
 #ifdef RPI1
   std::cout << "Detected Raspberry Pi version 1" << std::endl;
