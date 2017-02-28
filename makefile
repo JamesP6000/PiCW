@@ -8,8 +8,8 @@ all: PiCW
 mailbox.o: mailbox.c mailbox.h
 	g++ -c -Wall -lm mailbox.c
 
-PiCW: PiCW.cpp mailbox.o
-	g++ -D_GLIBCXX_DEBUG -std=c++11 -Wall -Werror -fmax-errors=5 -lm mailbox.o PiCW.cpp -pthread -oPiCW
+PiCW: PiCW.cpp mailbox.o mailbox.h
+	g++ -D_GLIBCXX_DEBUG -std=c++11 -Wall -Werror -fmax-errors=5 -lm $(pi_version_flag) mailbox.o PiCW.cpp -pthread -oPiCW
 
 clean:
 	-rm PiCW
