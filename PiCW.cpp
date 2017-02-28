@@ -648,9 +648,9 @@ void parse_commandline(
     std::cout << "  WPM: " << wpm << std::endl;
   }
   if (self_cal) {
-    temp << "  NTP will be used to periodically calibrate the transmission frequency" << std::endl;
+    std::cout << "  NTP will be used to periodically calibrate the transmission frequency" << std::endl;
   } else if (ppm) {
-    temp << "  PPM value to be used for all transmissions: " << ppm << std::endl;
+    std::cout << "  PPM value to be used for all transmissions: " << ppm << std::endl;
   }
   if (ditdit) {
     std::cout << "Will transmit an endless series of dits. CTRL-C to exit." << std::endl;
@@ -1291,6 +1291,9 @@ int main(const int argc, char * const argv[]) {
   );
 
   // Push text into AM thread
+  // Move cursor to the right to align realtime text output with requested
+  // text string on the dispaly.
+  std::cout << ' ';
   {
     std::unique_lock <std::mutex> lock(queue_mutex);
     for (unsigned int t=0;t<str.length();t++) {
